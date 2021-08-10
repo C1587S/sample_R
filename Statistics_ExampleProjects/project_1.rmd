@@ -1,0 +1,992 @@
+---
+title: "Fundamentos de Estadística"
+author: 'Sebastián Cadavid-Sánchez'
+subtitle: Parcial 1
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+fontsize: 11pt
+geometry: margin=1in
+linkcolor: blue
+urlcolor: blue
+citecolor: blue
+bibliography: bib/refs.bib
+biblio-style: apalike
+link-citations: yes
+---
+
+```{r, include=FALSE}
+# preliminares
+source('R/funciones_auxiliares.R')
+library(tidyverse)
+library(nullabor)
+library(patchwork)
+library(rsample)
+library(tinytex)
+```
+
+**Entrega:** Enviar la carpeta que incluya datos y codigo de solución a mas
+tardar el 19 de octubre antes de las 12:00pm (mediodia), por correo electrónico
+con el título fundamentos-parcial, un solo documento por equipo. No se aceptarán
+entregas extemporáneas. Será mejor entregar un examen resuelto parcialmente, que
+no entregar nada.
+
+**Instrucciones:**
+  
+* Tus respuestas deben ser claras y debes explicar los resultados, incluye
+también tus procedimientos/código de manera ordenada, y el código comentado.
+
+* Se evaluará la presentación de resultados (calidad de las gráficas, tablas,
+...), revisa la sección de visualización en las notas.
+
+* Las sesiones del Martes 13 y Jueves 15 a las 10 am, serán espacios para
+resolver dudas que puedan surgir del exámen.
+
+* No pueden compartir soluciones entre diferentes equipos, o alumnos del grupo
+001 de esta misma materia.
+
+* Al entregar este examen afirmas que el trabajo se realizó sólo con tu
+compañero de equipo. El material que utilizaste para apoyarte consistió de las
+notas en clase (pdf en canvas), el codigo fuente de las notas en el repositorio
+de Github, y el video disponible de la sesión de Martes 6 de Octubre. 
+
+* Al entregar estás dando tu consentimiento para que bajo sospecha y suficiente
+evidencia de copia se anule tu evaluación.
+
+>Nota: Este parcial se realizó utilizando las [notas](https://github.com/tereom/fundamentos) de clase del curso _Fundamentos de Estadística_ de la Maestría de Datos del ITAM (2020), escritas por Teresa Ortiz Mancera, Alfredo Garbuno Iñigo, y Luis Felipe Gonzalez.
+
+>Adicionalmente, se utilizaron como referencias @Chihara, @Hesterberg,  @Hosking, y @Baughman.
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, error = TRUE)
+```
+
+# Análisis Exploratorio
+
+### 1. NBER TH 
+
+Considera la tabla de datos dada en tabla_nber_th.csv. Es la tabla de
+frecuencias de 4353 pilotos de la segunda guerra mundial, donde los individuos
+están clasificados según:
+  
+* Tipo de ocupación en 1969. SE significa self-employed.  
+* Resultados de estudios de aptitud de 1943 (A5 es el nivel más alto, y A1 el
+más bajo).
+* Nivel de educación en 1969 (esta incluye años de escuela en 1943 más estudios
+posteriores a la guerra). E4 es el nivel más alto y E1 es el nivel más bajo.
+
+1. ¿Qué relación existe entre aptitud (1943) y el nivel de educación (1969)?
+Describe esta relación usando tablas de porcentajes y de índices (o perfiles).
+
+```{r, warning=F, message=F}
+datos_path <- './datos/tabla_nber_th.csv'
+tbl_nber <- read_csv(datos_path) 
+tbl_nber %>% arrange(Freq)
+```
+Para hacer manipulable la tabla, la expandimos a su versión larga. Es decir, cada observación es un renglón, y por lo tanto se crea una tabla con 4353 observaciones, correspondientes a todos los pilotos: `tbl_nber_lng`.
+
+```{r}
+n <- tbl_nber[["Freq"]]
+
+# tabla con todas las observaciones
+tbl_nber_lng <- tbl_nber[rep(sequence(nrow(tbl_nber)), n), ] %>% 
+  rename(aptitud=Aptitude, educacion=Education, ocupacion=Ocup_group) %>% 
+  select(-Freq)
+
+# tabla que agrupa frecuencias aptitud vs educacion
+tbl_nber_freq<- tbl_nber_lng %>% select(educacion, aptitud) %>%  
+  count(educacion, aptitud) %>% # hace conteos agrupados
+  pivot_wider(names_from = educacion, values_from = n)
+
+# tabla cruzada como la vista en clase
+tbl_cruzada <- tbl_nber_lng %>% select(educacion, aptitud) %>%  
+  count(educacion, aptitud)
+
+tbl_cruzada %>% formatear_tabla()
+```
+
+Para el desarrollo de este análisis vamos a empezar nuestro análisis con `tbl_cruzada`.
+
+Inicialmente, podemos observar, el grupo educativo con un mayor número de personas es E3 (28), seguido por E2 (25), E1 (24) y E4 (22).
+
+```{r}
+educacion <- tbl_nber_lng %>% group_by(educacion) %>%
+  tally() %>% mutate(prop = round(100 * n / sum(n))) %>%
+  select(-n)
+
+educacion%>% formatear_tabla()
+```
+
+Por otro lado, podemos observar, el grupo de aptitud con un mayor número de personas es A3 (37), seguido por A2 (24), A4 (17) y A2 (15), y A5 (8).
+
+```{r}
+aptitud <- tbl_nber_lng %>% group_by(aptitud) %>%
+  tally() %>% mutate(pct = round(100 * n / sum(n))) 
+
+aptitud %>% formatear_tabla()
+```
+
+Primero, obtenemos la siguiente tabla cruzada entre niveles educativos y de aptitud:
+
+```{r}
+tabla_cruzada <- tbl_nber_lng %>% group_by(educacion, aptitud) %>% 
+  tally() %>% 
+  # porcentajes por aptitud
+  group_by(educacion) %>% 
+  mutate(prop = round(100 * n / sum(n))) %>%
+  select(-n)
+
+tabla_cruzada %>%
+  pivot_wider(names_from = educacion, values_from = prop,
+              values_fill = list(prop = 0)) %>%
+  formatear_tabla()
+```
+
+En torno a la tabla anterior, podemos ver que es difícil extraer un patrón marcado entre nivel educativo y aptitud del piloto.
+Al igual que en clase podemos tratar de verlo de forma visual:
+
+```{r,  cache=TRUE, out.width = '90%', fig.asp = 0.55, fig.align= 'center', fig.width = 5}
+ggplot(tabla_cruzada %>% ungroup %>%
+  mutate(price = fct_reorder(aptitud, prop)),
+  aes(x = aptitud, y = prop, group = educacion, colour = educacion)) +
+  geom_point() + coord_flip() + geom_line()
+```
+Como observamos en el gráfico anterior, el nivel de aptitud E3 es el que tiende a concentrar a más pilotos a lo largo de todas las categorías educativas. 
+
+
+Ahora, procedemos a calcular los *perfiles columna*. En este ejemplo, el ejercicio consiste en comparar cada una de las columnas con niveles educativos con la columna marginal de la tabla cruzada generada.
+
+```{r}
+num_grupos <- n_distinct(tbl_nber_lng %>% select(educacion))
+
+tabla <- tbl_nber_lng %>%
+  group_by(educacion, aptitud) %>%
+  tally() %>%
+  group_by(educacion) %>%
+  mutate(prop_aptitud = (100 * n / sum(n))) %>%
+  group_by(aptitud) %>%
+  mutate(prom_prop = sum(prop_aptitud)/num_grupos) %>%
+  mutate(perfil = 100 * (prop_aptitud / prom_prop - 1))
+
+tabla %>% formatear_tabla()
+```
+```{r}
+tabla_perfil <- tabla %>%
+  select(educacion, aptitud, perfil, pct = prom_prop) %>%
+  pivot_wider(names_from = educacion, values_from = perfil,
+              values_fill = list(perfil = -100.0))
+if_profile <- function(x){
+  any(x < 0) & any(x > 0)
+}
+marcar <- marcar_tabla_fun(25, "red", "black")
+tab_out <- tabla_perfil %>%
+  arrange(desc(E1)) %>%
+  select(-pct, everything()) %>%
+  mutate(across(where(is.numeric), round, 2)) %>% 
+  mutate_if(if_profile, marcar) %>%
+  knitr::kable(format_table_salida(), escape = FALSE, digits = 0, booktabs = T) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "scale_down"),
+                            bootstrap_options = c( "hover", "condensed"),
+                            full_width = FALSE)
+if (knitr::is_latex_output()) {
+  gsub("marca_propia", "marca-propia", tab_out)
+} else {
+  tab_out
+}
+```
+
+Graficando los resultados de la tabla anterior:
+
+
+```{r, fig.width = 6, fig.height = 2,  cache=TRUE, out.width = '95%', fig.align= 'center'}
+tabla_graf <- tabla_perfil %>%
+  ungroup %>%
+  mutate(aptitud = fct_reorder(aptitud, E1)) %>%
+  select(-pct) %>%
+  pivot_longer(cols = -aptitud, names_to = "educacion", values_to = "perfil")
+g_perfil <- ggplot(tabla_graf,
+  aes(x = aptitud, xend = aptitud, y = perfil, yend = 0, group = educacion)) +
+  geom_point() + geom_segment() + facet_wrap(~educacion, ncol=4) +
+  geom_hline(yintercept = 0 , colour = "gray")+ coord_flip()
+g_perfil
+```
+
+
+**Interpretación:**
+
+En este caso hicimos la interpretación con respecto a la categoría de aptitud, versus los niveles educativos, simplemente por la relación temporal existente. Es decir, dado que las mediciones de aptitud se hicieron en 1943, y las de educación en 1969.
+
+- Para los pilotos que obtuvieron una calificación de aptitudes del tipo A1 se pueden realizar las siguientes conclusiones, (con respecto a las demás categorías):
+
+  - En 1969, habían en promedio 39.74% más pilotos con el menor nivel educativo (E1),
+  - en promedio un habían 26.89% más pilotos con el segundo nivel educativo más bajo (E2)
+  - en promedio, habían 42.04% menos pilotos cn el mayor nivel educativo (E4)
+  
+- En el grupo de aptitud A4 en promedio hubo 26.89% más pilotos con niveles educativos E2 (la segunda más baja) con respecto al promedio de las demás categorías.
+
+- Con respecto al grupo de aptitudes A5 se puede establecer lo siguiente: 
+  - en 1969 contaban con un nivel de educación del tipo E1 a una tasa del 46.6% menos que el promedio de las demás categorías.
+  - También contaban con un nivel de educación nivel E2 a una tasa del 39.62% menos que el resto de las evaluaciones.
+  - Finalmente, esta misma categoría de pilotos contaba en 1969 con un nivel de educación E4 a una tasa del 52.56% más que el promedio de las otras evaluaciones, y 33.67% más para la categoría E3.
+
+
+
+2. Describe la relación entre nivel de educación y ocupación ¿Qué concluyes de esta relación? ¿Cuáles dirías que son ocupaciones asociadas a educación alta y cuáles a educación baja?
+
+**R**
+Haciendo uso de los resultados presentados en la pregunta anterior, procedemos a realizar análisis de perfiles, pero esta vez con respecto a educación y ocupación. 
+
+Inicialmente, determinamos en las categorías de ocupación, como está distribuida la muestra de pilotos:
+
+```{r}
+ocupacion <- tbl_nber_lng %>% group_by(ocupacion) %>%
+  tally() %>% mutate(pct = round(100 * n / sum(n))) 
+
+ocupacion %>% formatear_tabla()
+```
+Como se puede observar, la categoría con más pilotos es la de asalariados (69%), seguida por autoempleados con negocio (19%), profesionales (7%), y finalmente, profesores (5%).
+
+Procedemos a calcular una tabla cruzada entre educación y ocupación:
+
+```{r}
+tabla_cruzada <- tbl_nber_lng %>% group_by(educacion, ocupacion) %>% 
+  tally() %>% 
+  # porcentajes por aptitud
+  group_by(educacion) %>% 
+  mutate(prop = round(100 * n / sum(n))) %>%
+  select(-n)
+
+tabla_cruzada %>%
+  pivot_wider(names_from = educacion, values_from = prop,
+              values_fill = list(prop = 0)) %>%
+  formatear_tabla()
+```
+
+- En concordancia a lo mencionado con anterioridad, se posible observar que la categoría donde está el mayor número de pilotos (asalariados), también es la que concentra más pilotos en todas las categorías educativas. 
+
+- Por otro lado, también es posible observar que la categoría de pilotos con negocio propio es la segunda que concentra más pilotos de de los niveles educativos E1, E2, y E3.
+
+- En las categorías de profesionales autoempleados y profesores, la mayor concentración de pilotos se da en el nivel educativo E4 (21, y 22, respectivamente).
+
+Al igual que en el punto anterior, realizamos análisis gráfico de la tabla anterior, y se reafirman las conclusiones expuestas.
+
+```{r,  cache=TRUE, out.width = '90%', fig.asp = 0.55, fig.align= 'center', fig.width = 5}
+ggplot(tabla_cruzada %>% ungroup %>%
+  mutate(price = fct_reorder(ocupacion, prop)),
+  aes(x = ocupacion, y = prop, group = educacion, colour = educacion)) +
+  geom_point() + coord_flip() + geom_line()
+```
+Ahora calculamos los *perfiles columna*:
+
+```{r}
+num_grupos <- n_distinct(tbl_nber_lng %>% select(educacion))
+
+tabla <- tbl_nber_lng %>%
+  group_by(educacion, ocupacion) %>%
+  tally() %>%
+  group_by(educacion) %>%
+  mutate(prop_ocupacion = (100 * n / sum(n))) %>%
+  group_by(ocupacion) %>%
+  mutate(prom_prop = sum(prop_ocupacion)/num_grupos) %>%
+  mutate(perfil = 100 * (prop_ocupacion / prom_prop - 1))
+
+tabla %>% formatear_tabla()
+```
+  
+```{r}
+tabla_perfil <- tabla %>%
+  select(educacion, ocupacion, perfil, pct = prom_prop) %>%
+  pivot_wider(names_from = educacion, values_from = perfil,
+              values_fill = list(perfil = -100.0))
+if_profile <- function(x){
+  any(x < 0) & any(x > 0)
+}
+marcar <- marcar_tabla_fun(25, "red", "black")
+tab_out <- tabla_perfil %>%
+  # arrange(desc(`Teacher`)) %>%
+  select(-pct, everything()) %>%
+  mutate(across(where(is.numeric), round, 2)) %>% 
+  mutate_if(if_profile, marcar) %>%
+  knitr::kable(format_table_salida(), escape = FALSE, digits = 0, booktabs = T) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "scale_down"),
+                            bootstrap_options = c( "hover", "condensed"),
+                            full_width = FALSE)
+if (knitr::is_latex_output()) {
+  gsub("marca_propia", "marca-propia", tab_out)
+} else {
+  tab_out
+}
+```
+
+Graficando la tabla anterior:
+
+```{r, fig.width = 6, fig.height = 2,  cache=TRUE, out.width = '95%', fig.align= 'center'}
+tabla_graf <- tabla_perfil %>%
+  ungroup %>%
+  # mutate(ocupacion = fct_reorder(ocupacion, `Teacher`)) %>%
+  select(-pct) %>%
+  pivot_longer(cols = -ocupacion, names_to = "educacion", values_to = "perfil")
+g_perfil <- ggplot(tabla_graf,
+  aes(x = ocupacion, xend = ocupacion, y = perfil, yend = 0, group = educacion)) +
+  geom_point() + geom_segment() + facet_wrap(~educacion, ncol=4) +
+  geom_hline(yintercept = 0 , colour = "gray")+ coord_flip()
+g_perfil
+```
+
+
+**Interpretación:**
+
+Se concluye para los grupos de 1969 la siguiente forma (con respecto al promedio de las demás categorías de educación):
+
+- Para la categoría de pilotos con niveles educativos más bajos (E1), se puede concluir lo siguiente:
+  - Ocuparon puestos como maestros a una tasa de 98.39% menor que el promedio, o estaban auto empleados de forma profesional a una tasa de 91.69% menos que el promedio.
+
+- Para la categoría de pilotos con los segundos niveles educativos más bajos (E2):
+  - Ocuparon puestos como maestros a una tasa de 89.43% menos que el promedio, o estaban auto empleados de forma profesional a una tasa de 85.71% menos que el promedio. Por otro lado, estaban auto empleados con negocio propio a una tasa del 48.38% más que el promedio.
+
+- Para la categoría de pilotos que llegaron a un nivel educativo (E3):
+  - Ocuparon puestos como maestros a una tasa de 83.77% menos que el promedio.
+  
+- Para la categoría de pilotos que llegaron a un nivel educativo más alto (E4):
+  - Ocuparon puestos como maestros a una tasa de 271.59% más que el promedio (casi dos veces y media más), o estaban auto empleados de forma profesional a una tasa de 195.94% (casi el doble) más que el promedio. Por otro lado, estaban auto empleados con negocio propio a una tasa del 70.87% menos que el promedio.
+
+De las anteriores conclusiones para el grupo de pilotos y sus datos recolectados en 1969, se llega a que las ocupaciones con educación más alta (E4) son los profesionales autoempleados, y los maestros. Por otro lado, las de educación más baja son los autoempleados y los empleados. 
+
+Naturalmente,ser profesional y maestro implica haber logrado niveles universitarios en la mayoría de los casos, lo que hace que este grupo sea educado a un alto nivel. 
+
+# Mini-proyecto (75 \% + 5\%)
+
+
+Utilizaremos los datos de un experimento de modificación del
+tiempo *(weather)* en el cual se investigó el efecto de yoduro de plata (IAg)
+para atenuar tormentas eléctricas [Baughman et al
+1976](https://www.jstor.org/stable/26177578?seq=1#metadata_info_tab_contents).
+
+Los datos se generaron seleccionando al azar tormentas candidato en donde se
+incorporó el aerosol *(seeding)* de manera aleatoria. Es decir, una vez
+seleccionando una posible tormenta, se decidió al azar si rociar o no las nubes
+con el aerosol mencionado.
+
+Los resultados se pueden cargar de la siguiente tabla. Las columnas son la fecha
+en la que ocurrió la tormenta, el número de rayos que hicieron contacto con
+tierra, y el indicador si la tormenta fue tratada con aerosoles o no. Previo a la 
+recolección de datos se espera que el yoduro de plata disminuya el número de 
+rayos que immpactan la tierra.
+
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+truenos <- read_csv('datos/tormentas.csv')
+```
+
+Los datos se ven de la siguiente forma:
+
+```{r tbl_truenos, echo=FALSE, results='asis'}
+test_tbl <- truenos[1:5, 1:3]
+test_tbl %>% formatear_tabla()
+```
+
+## Análisis exploratorio y pruebas de hipótesis 
+
+1. Ahora haremos un breve EDA para determinar ciertos supuestos para aplicar las
+técnicas que hemos visto en clase. Haz resumenes númericos del número de rayos 
+reportados. 
+
+**R. **
+
+_Nota: Debemos analizar las estadísticas descriptivas con precaución, dado que estamos analizando una variable que es discreta (conteo de truenos)_
+
+
+Inicialmente, observamos que se aplicó el aerosol a 12 tormentas y no se aplicó en otras 11. En total tenemos 23 observaciones.
+```{r}
+table(truenos$aerosol)
+```
+
+Revisaremos la variable de los conteos con relación a sus percentiles. Como se mencionó anteriormente, debemos tomar este análisis con precaución, aclarando que estamos realizando análisis numérico a una variable discreta de conteos, lo que explica los saltos en los valores.
+
+```{r}
+truenos_freq_conteo <- truenos %>%
+  mutate(orden_truenos = rank(conteos, ties.method = "first"),
+         f_absoluta = (orden_truenos - 0.5) / n()) %>%
+  select(orden_truenos, f_absoluta, conteos) %>%
+  arrange(f_absoluta)
+formatear_tabla(cbind(head(truenos_freq_conteo), tail(truenos_freq_conteo)))
+```
+
+```{r, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10}
+g_orden <- ggplot(truenos_freq_conteo, aes(y = orden_truenos, x = conteos)) +
+  geom_point(colour = "red", alpha = 0.5) +
+  labs(subtitle = "Cuenta total")
+g_cuantiles <- ggplot(truenos_freq_conteo, aes(y = f_absoluta, x = conteos)) +
+  geom_point(colour = "red", alpha = 0.5) +
+  geom_line(alpha = 0.5) +
+  labs(subtitle = "")
+g_orden + g_cuantiles
+```
+
+```{r}
+quantile(truenos$conteos)
+```
+
+```{r}
+outlier_values <- boxplot.stats(truenos$conteos)$out
+# los outliers son:
+outlier_values
+```
+
+Como se observa de acuerdo a la tablas y gráficas de percentiles, se posible observar que la gran mayoría de los conteos se concentran hasta valores no mayores a los 47 rayos por tormenta, sin embargo, llama la atención el valor máximo de 358, valor atípico que inducirá el sesgo de la distribución a nivel agregado.
+
+En particular, se puede notar que existe una gran diferencia entre el tercer cuantil y el máximo, por lo que da indicios de un sesgo hacia la derecha, o una cola muy pesada en dicha dirección. 
+
+Para confrimar lo anterior, podríamos hacer análisis gráfico de la distribución de la variable `conteos`.
+
+```{r, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10}
+ggplot(truenos, aes(x = conteos)) +
+  geom_histogram(binwidth = 1)
+```
+
+El análisis gráfico nos confirma lo mencioado anteriormente. Por otro lado, además de hacer resaltado la alta dispersión en los datos inducida por el valor atípico de la derecha, cabe resaltar que los datos tienen una pequeña cantidad de observaciones (en total 23). 
+  
+  
+Por otro lado, dado que nos interesa saber divergencias en el número de truenos entre las tormentas en las cuales sea aplicó aerosol y aquellas que no, entonces calculamos las principales estadísticas numéricas para cada una de dichas categorías. 
+
+
+```{r tabla_truenos, caption='Tabla con estadísticas descriptivas de los conteos de truenos', echo=FALSE, warning=FALSE}
+truenos_sum <- truenos %>% group_by(aerosol) %>% 
+  # estadísticas de interés
+  summarize(n=n(),
+            promedio=mean(conteos), 
+            sd=sd(conteos),
+            mediana=median(conteos),
+            min=min(conteos),
+            max=max(conteos),
+            .groups='drop')
+
+truenos_sum %>% formatear_tabla()
+```
+
+Adicionalmente, generamos histogramas diferenciados para cada grupo.
+
+```{r hist_truenos, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10, fig.cap = 'Histograma por grupos de conteo de rayos. Las líneas punteadas representan la media de cada grupo.', warning=FALSE, echo=FALSE}
+# Análisis gráfico
+# generar medias de conteos por "tipo" de tormenta
+mu <- truenos %>% group_by(aerosol) %>% summarize(mean=mean(conteos), .groups = 'drop')
+# gráfica de histograma
+p1 <- truenos %>%  ggplot(aes(x=conteos)) +
+  geom_histogram(aes(fill=aerosol), color='black', bins=23, alpha=0.5)+
+  geom_vline(data=mu, aes(xintercept=mean, color=aerosol), linetype="dashed") +
+  labs(fill = "Aerosol") +
+  guides(color = FALSE)
+p2 <- ggplot(truenos, aes(x = aerosol, y = conteos)) +
+  geom_boxplot() +coord_flip()
+
+p1/p2
+```
+Podemos notar que el outlier está en el "No". Adicionalmente, se puede notar que el conteo para los rayos que tocan el suelo es menor para las tormentas en las que se aplicó el aerosol, lo cual podría tentativamente indicar que efectivamente se redujeron los truenos al aplicarlo. Esto se deberá comprobar con análisis estadístico riguroso.
+
+2. Qué observaciones puedes hacer de este breve resumen? (Considera que la
+variable de interés son los conteos de rayos)
+
+**R. **
+
+- Se aplicó el aerosol de yoduro de plata (IAg) a lasz nubes en 12 tormentas y no se aplicó en otras 11. En total tenemos 23 observaciones. Este número es reducido y dificulta el análisis de herramientas como el histograma.
+
+- Se puede notar que existe una gran diferencia entre el tercer cuaníl y el máximo, por lo que podemos decir que se tendrá una cola sezgada a la derecha.
+
+- Existe un dato atípico (358), con un valor muy lejano al resto. Este valor atípico pertenece al conteo de tormentas donde no se aplicó el aerosol.
+
+- El promedio del número de truenos que tocan el suelo para las tormentas donde se aplica aerosol es 19.2, mientras que para aquellas que no es 69.4.
+
+- Si calculamos estadísticos de dispersión como la desviación estandar observamos que esta métrica es mucho mayor para tormentas sin aerosol (98.9), en comparación con aquellas que no (13.6). Esto es inducido por la presenica de un valor inusual en el primer grupo mencionado.  
+
+- Dado lo mencionado anteriormente, calcular estadísticos entre grupos que sean altamente sensibles a valores extremos, podría sesgar los resultados. 
+
+- Se puede observar que el conteo para los rayos que tocan el suelo es menor para las tormentas en las que se aplicó el aerosol, lo cual podría dar indicios de que efectivamente se redujeron los truenos al aplicarlo. Esto se deberá comprobar con análisis estadístico.
+
+
+3. Ahora trataremos de validar un supuesto clásico, el supuesto de normalidad.
+Auxiliate de herramientas gráficas para explorar este supuesto y determinar si es razonable para nuestro conjunto de datos.
+
+**R. **
+
+Como se sugiere en el punto anterior, a continuación se realizan los gráficos Q-Q para observar qué tanto se parecen las distribuciones de los grupos a la distribución normal teórica asociada. 
+
+
+```{r, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10, fig.cap='Análisis gráfico de normalidad para conteos con aerosol. La línea roja continua representa la distribución normal teórica. La línea roja punteada representa la media del conjunto de datos.'}
+
+g_1_s<-truenos %>% filter(aerosol=="Si") %>% ggplot(aes(sample = conteos)) + 
+  geom_qq(alpha =0.5)+geom_qq_line(colour ="red", alpha=0.7)
+
+g_2_s<-truenos %>% filter(aerosol=="Si") %>% ggplot(aes(x = conteos)) + geom_histogram(bins = 9) +
+    coord_flip() + xlab("") + labs(subtitle = " ") +
+    geom_vline(data=mu, aes(xintercept=mean[2], color="red"), linetype="dashed") + 
+    theme(legend.position = "none")
+
+g_s <- g_1_s + g_2_s
+g_s
+```
+
+Como se puede observar en las gráfica anterior tanto en el gráfico Q-Q como en el histograma, la distribución de los conteos para las tormentas donde se roció aerosol a las nubes tiene colas pesadas a ambos lados. Y en particular, la distirbución del grupo se aleja de la teórica normal. 
+En especial, se resalta un valor atípico de 49 conteos de rayos, el cual genera una discontinuidad en el histograma. Dado lo mencionado, para este grupo concluimos que la distribución no es normal.
+
+```{r, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10, fig.cap='Análisis gráfico de normalidad para conteos sin aerosol. La línea roja continua representa la distribución normal teórica. La línea roja punteada representa la media del conjunto de datos.'}
+g_1_n<-truenos %>% filter(aerosol=="No") %>% ggplot(aes(sample = conteos)) + 
+  geom_qq(alpha =0.5)+geom_qq_line(colour ="red", alpha=0.7)
+
+g_2_n<-truenos %>% filter(aerosol=="No") %>% ggplot(aes(x = conteos)) + geom_histogram(bins = 11) +
+    coord_flip() + xlab("") + labs(subtitle = " ") +
+    geom_vline(data=mu, aes(xintercept=mean[2], color="red"), linetype="dashed") + 
+    theme(legend.position = "none")
+
+g_n <- g_1_n + g_2_n
+g_n
+```
+
+Para los datos de lluvias donde no se aplicó aerosol de los gráficos Q-Q y el histograma generados observamos la existencia de un valor atípico de 358 conteos. El cual hace que el histograma genera una discontinuidad en el histograma e invalida automáticamente que se commporte como una normal. Esto es confirmado por el fuerte sesgo hacia la derecha de la distribución, lo que impide totalmente que exista simetría en la misma. 
+
+
+Posiblemente estén tentados a descartar los valores atípicos. Claramente tenemos
+un problema. Si quisiéramos hacer una prueba de hipótesis por medio de
+diferencias en media, dicho valor atípico sesgaría nuestra distribución de
+referencia. Y el efecto sería catastrófico, valores grandes de nuestro estimador
+de prueba se verían como datos usuales bajo la distribución de referencias.
+
+Una alternativa para estos casos, que no vimos en clase, es hacer un prueba de
+diferencia en suma de órdenes *(sum of ranks).* Para esto ordenamos los datos
+por la variable `conteos` y asignamos una variable `orden` que asigna el lugar
+que dicho registro recibe.
+
+```{r}
+truenos <- truenos %>% 
+  arrange(conteos) %>% 
+  mutate(orden = min_rank(conteos))
+# acá lo que hace es, sihay empate les asigna el mismo rango. Por eso la suma no da 276, sino 275 (hay dos 5)
+truenos %>% head() %>% formatear_tabla()
+```
+
+La idea es sencilla, si un grupo tiende a tener menores observaciones *la suma
+de sus órdenes* será menor que la suma de los órdenes del otro grupo. La
+diferencia de la suma de órdenes será nuestro estadístico de prueba. Y podremos
+comparar el observado con respecto a la distribución de referencia.
+
+4. Escribe el código adecuado para nuestro estadístico de prueba: la diferencia
+de la suma de órdenes.
+
+**R. **
+
+La pregunta de investigación que se quiere responder es si aplicar yoduro de plata (IAg)
+para atenuar tormentas eléctricas tiene un efecto negativo en el conteo de rayos en contacto 
+con el suelo. Dado lo anterior, se genera la función `calc_diford` para 
+calcular la diferencia entre el orden de grupo "Si" y el del grupo "No". 
+
+La hipóstesis nula plantea que no hay diferencias entre los grupos. 
+
+```{r, warning=FALSE}
+calc_diford <- function(truenos){
+  "
+  Calcula el estadístico de dierencias de la suma de órdenes entre grupos (No-Si)
+  "
+  truenos %>% 
+  group_by(aerosol) %>% 
+  summarize(suma_ord = sum(orden), .groups = 'drop') %>% 
+  pivot_wider(names_from = aerosol, values_from=suma_ord) %>% 
+  mutate(diff= Si-No) %>% 
+  pull(diff)
+} 
+  
+dif_obs <- calc_diford(truenos)
+dif_obs
+```
+
+Se probó la función para calcular la diferencia observada en los conteos entre grupos, la cual es de 59 a favor de las tormentas donde no se aplica aerosol.
+
+En este caso vamos a plantear una prueba de hipótesis alternativa en la cual el número de conteos de rayos en las tormentas con aerosol es menor que el de las tormentas sin este componente. Es decir el signo de esta diferencia es positivo.
+
+5. La distribución de referencia implica todas las asignaciones al azar de la etiqueta que marca si la tormenta fue modificada artificialmente con aerosol. 
+
+¿Cuántas posibilidades existen para dicha distribución?
+
+**R. **
+
+```{r, include=FALSE}
+choose(23,12)
+```
+
+Como se presentó anteriormente, el número de observaciones que en la muestra original pertenecen al grupo de tormetas electricas donde sí se aplicó yoduro de plata (IAg) son 12 y las que no 11. Para determinar las posibles asignaciones que se pueden realizar de grupos de 12 (y 11) entre 30 observaciones, hacemos el número de posibles combinaciones:
+
+$$
+^{23}C_{12}=\frac{23!}{(12!)(11!)}=1,352,078
+$$
+
+
+Hay 1,352,078 formas de seleccionar entre 23 elementos un grupo de 12 elementos y otro de 11, permutando las etiquetas al azar. 
+
+
+6. Por suerte, ya no estamos en los 70's y podemos auxiliarnos de simulación para
+construir la distribución de permutaciones. Genera las permutaciones correspondientes
+por medio de simulación. Alrededor de $10^4$ serán más que suficientes. 
+
+**R. **
+
+Para realizar la distribución de referencia utilizamos la función `lineup` de la librería `nullabor`.
+
+```{r ref_simul, cache = TRUE, warning=FALSE, message=FALSE}
+N_rep <- 10^4
+permutaciones <- lineup(null_permute("aerosol"), truenos, n = N_rep)
+```
+
+7. Calcula el estadístico de prueba para las permutaciones y grafica un histograma donde muestres
+el estadistico de prueba observado. 
+
+**R. **
+
+En el siguiente código, para cada una de las permutaciones generadas se calcula la diferencia de _rankings_ para los distintos grupos.
+
+```{r ref_val, cache=TRUE}
+set.seed(1992)
+valores_ref <- permutaciones %>% group_by(.sample) %>%
+                    nest()  %>%
+                    mutate(diferencia = lapply(data, calc_diford)) %>% 
+                    unnest(diferencia)  %>% ungroup() %>% select(diferencia)
+```
+
+Posteriormente, utilizando el código utilizado en clase, calculamos el inverso de la función de cuantiles, y el percentil del valor observado: ZZ.
+
+```{r}
+# Función de distribución acumulada (inverso de función de cuantiles)
+dist_perm <- ecdf(valores_ref$diferencia)
+# Calculamos el percentil del valor observado
+percentil_obs <- dist_perm(dif_obs)
+
+percentil_obs
+```
+
+El histograma de la distribución de referencia se presenta a continuación:
+
+```{r, echo=FALSE, cache=T, fig.align="center", out.width="95%", fig.height=10, fig.with=10}
+
+g_1 <- ggplot(valores_ref, aes(sample = diferencia)) + geom_qq(distribution = stats::qunif)  +
+    xlab("f") + ylab("diferencia") + labs(subtitle = "Distribución nula o de referencia") +
+    geom_hline(yintercept = dif_obs, colour = "red") +
+    annotate("text", x = 0.3, y = dif_obs + 4, label = "Diferencia observada", colour = "red")
+g_2 <- ggplot(valores_ref, aes(x = diferencia)) + geom_histogram(bins = 20) +
+    coord_flip() + xlab("") + labs(subtitle = " ") +
+    geom_vline(xintercept = dif_obs, colour = "red") +
+    annotate("text", x = dif_obs, y = N_rep * .1, label = percentil_obs, vjust = -0.2, colour = "red")
+
+g_1 + g_2
+```
+
+8. Calcula el *valor-p* de la hipótesis nula y escribe tu reporte sobre dicha prueba de hipótesis. 
+
+**R. **
+
+Para calcular el *valor-p* vemos qué porcentaje de la distribución de referencia cayó por encima del estadístico observado. 
+
+```{r}
+valor_p <- valores_ref %>% ungroup() %>% select(diferencia) %>% 
+  mutate(bool = diferencia <= dif_obs) %>% 
+  pull(bool) %>% 
+  mean()
+
+valor_p # 0.0148
+```
+
+
+Corroboramos los reusltados para la prueba de una cola:
+
+```{r}
+# revisar
+# min(dist_perm(dif_obs), (1 - dist_perm(dif_obs)))
+perms_ecdf <- ecdf(valores_ref$diferencia)
+p <-min(perms_ecdf(dif_obs), 1- perms_ecdf(dif_obs))
+p
+```
+ 
+ 
+El p-valor calculado es 0.0148, lo que indica que una proporción muy baja de veces (0.01) el estadístico calculado es menor o igual al observado. Lo anterior, nos indica que la probabilidad de que el aerosol reduzca el impacto de rayos en tormentas eléctricas aleatoriamente es muy baja. Es decir, hay indicios de que el aerosol si ayuda a disimuir el número de rayos que impactan el suelo. Los anteriores resultados son basados en el estadístico de diferencia de _ranking_.
+
+
+**5\% extra.** A continuación mostramos lo que una prueba vista en cursos clásicos de
+estadística arrojaría ¿Puedes interpretarla?
+
+```{r, warning = FALSE}
+wilcox.test(truenos$conteos~truenos$aerosol, 
+            alternative="greater") 
+?wilcox.test
+```
+**R. **
+
+**Acá falta mencionar qué hace el estadístico wilcox**
+
+Como se observa en la documentación, la función `wilcox.test` de `R` del paquete `stats` funciona de la siguiente manera:
+
+Plantea que no hay diferencias entre las medias de dos grupos. Es decir, en nuestro ejemplo, la hipótesis nula plantea que el conteo de rayos que caen en el suelo en tormentas eléctricas donde se aplica aerosol es igual a aquellos donde no. 
+
+
+La hipótesis alternativa se plantea por medio del parámetro `alternative`. En particular, hay tres opciones.  En este caso se usa "greater" convirtiendo la prueba de hipótesis en una de una sola cola, superior. Donde se prueba que la diferencia entre grupos sea mayor a cero: _alternative hypothesis: true location shift is greater than 0_
+
+
+Los datos de los grupos sobre los cuales se va a realizar el test se pueden pasar de dos formas, como dos vectores, `x` y `y`, ó, como en este caso, usando una ecuación `z~var_grupo`. En la última notación, la variable `z` contiene los datos numéricos, y `var_grupo` sirve para diferenciarlos entre grupos, Dado lo anterior, utilizamos `truenos$conteos~truenos$aerosol` para indicar que diferenciamos la variable conteos, por medio de "aerosol". 
+
+Note que como se mencionó, la anterior prueba sería equivalente a:
+
+```{r, warning=FALSE}
+y <- truenos$conteos[truenos$aerosol=="Si"]
+x <- truenos$conteos[truenos$aerosol=="No"]
+
+wilcox.test(x,y, alternative="greater" , paired = FALSE)
+```
+
+
+Al computar el test, se obtiene un p-valor de 0.0156 para la prueba, por lo que . En estadística tradicional, si consideramos lo suficientemente infrecuente un umbral de 0.05, entonces no tenemos evidencia estadística suficiente para aceptar la hipótesis nula. Los resultados van en la misma dirección que los obtenidos utilizando por medio del computo de la distribución de referencia. 
+
+
+# Distribución *bootstrap* para estimadores con cocientes
+
+Supongamos ahora que para efectos del análisis la dispersión de los datos de las
+tormentas se pueden caracterizar por medio de la estadística de escala en L
+*(L-scale)* [Hoskin,
+1990](https://www.jstor.org/stable/2345653?seq=1#metadata_info_tab_contents),
+$$ \lambda_2 = \frac{2}{n (n -1)} \sum_{i = 1}^{n-1} \sum_{j = i + 1}^n |x_i - x_j|,$$
+donde $\lambda_2$ caracteriza la mitad de la distancia promedio entre todos los
+posibles pares en una muestra de tamaño $n.$ Para un conjunto de datos muy
+concentrado el valor de $\lambda_2$ será muy pequeño, mientras que para un
+conjunto de datos mas dispersos éste será grande.
+
+Compararemos el valor de $\lambda_2$ para las tormentas tratadas con aerosoles y
+las tormentas sin el tratamiento. Para esto compararemos el cociente 
+$$\theta_L = \frac{\lambda_2^{S}}{\lambda_2^{N}},$$
+donde $\lambda_2^{S}$ denota la estadística $L$ calculada para las tormentas con
+aerosol, y $\lambda_2^{N}$ para las tormentas sin aerosol.
+
+Si siguiéramos el camino de prueba de hipótesis consideraríamos una hipótesis nula donde
+$\theta_L = 1$.
+
+9. Escribe la función que calcule la estadística $\lambda_2$. Para esto
+sugerimos le heches un ojo a la función `dist`. Una vez que tengas esa función
+utilizala para realizar simulaciones como en los puntos anteriores y puedas
+explorar la distribución de referencia. Qué observas de la distribución
+resultante?
+
+**R. **
+
+Se creó la función `calc_lambda2` que calcula el estadístico $\lambda_{2}$ para un vector $x$. Como se sugirió, se utiliza la función `dist`. Dado que para computar el estadístico de interés solo es requerida la diagonal inferior de las distancias, se utiliza la misma para computar el término $\sum_{i = 1}^{n-1} \sum_{j = i + 1}^n |x_i - x_j|$.
+
+Para fines prácticos, también se crea la función `calc_thetaL` que calcula $\theta_L$ haciendo uso de la función `calc_lambda2`.
+
+```{r}
+calc_lambda2 <- function(x){
+  "Calcula estadístico lambda2 para el vector numérico x."
+  n <- length(x)
+  sum_dist <- dist(x, method="euclidean")  %>% sum() # suma distancias
+  lambda <- 2* 1/((n-2)*(n)) * sum_dist
+  
+  return(lambda)
+}
+
+calc_thetaL <- function(truenos){
+  "Calcula el estadístico theta_L utilizando lambda2 para cada grupo. 
+  Recibe tbl truenos con los resctivos datos"
+  # define vectores de cada grupo
+  x_si <- truenos$conteos[truenos$aerosol=="Si"] 
+  x_no <- truenos$conteos[truenos$aerosol=="No"] 
+  # calcula lambda2 para cada grupo
+  l2s <- calc_lambda2(x_si)
+  l2n <- calc_lambda2(x_no)
+  # calcula theta_L
+  theta_L_obs <- l2s/l2n
+  
+  return(theta_L_obs)
+}
+
+```
+
+A modo de ejemoplo, podemos calcular $\lambda_2^{S}$ (l2s) y $\lambda_2^{N}$ (l2n) las tormentas cuando se aplicó aerosol, y cuando no, respectivamente.
+
+```{r}
+# Ejemplo de la función
+x_si <- truenos$conteos[truenos$aerosol=="Si"] 
+x_no <- truenos$conteos[truenos$aerosol=="No"] 
+
+l2s <- calc_lambda2(x_si)
+l2n <- calc_lambda2(x_no)
+
+# calculamos thetaL directamente
+theta_L_obs <- calc_thetaL(truenos)
+```
+
+Los resultados obtenidos son $\lambda_2^{S}=17.31$ y $\lambda_2^{N}=92.88$ Dado lo anterior, $\theta_L^{obs} = \frac{17.31}{92.88}=0.18$. 
+
+Una vez planteado lo anterior, procedemos a computar la distribución de referencia. 
+
+```{r ref_val_theta, cache=TRUE}
+# calcula theta_L para hayar la distribución de referencia
+set.seed(1992)
+valores_ref_theta <- permutaciones %>% group_by(.sample) %>%
+                    nest()  %>%
+                    mutate(theta_L = lapply(data, calc_thetaL)) %>% 
+                    unnest(theta_L) %>% ungroup() %>% select(theta_L)
+
+# Función de distribución acumulada (inverso de función de cuantiles)
+dist_perm_theta <- ecdf(valores_ref_theta$theta_L)
+# Calculamos el percentil del valor observado
+percentil_obs_theta <- dist_perm_theta(theta_L_obs)
+```
+
+
+```{r, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10}
+g_1_theta <- ggplot(valores_ref_theta, aes(sample = theta_L)) + geom_qq(distribution = stats::qunif)  +
+    xlab("f") + ylab("diferencia") + labs(subtitle = "Distribución nula o de referencia") +
+    geom_hline(yintercept = theta_L_obs, colour = "red") +
+    annotate("text", x = 0.3, y = theta_L_obs -.1, label = "theta_L observada", colour = "red") 
+
+g_2_theta <- ggplot(valores_ref_theta, aes(x = theta_L)) + geom_histogram(bins = 20) +
+    coord_flip() + xlab("") +
+    geom_vline(xintercept = theta_L_obs, colour = "red") +
+    annotate("text", x = theta_L_obs-.3, y = N_rep * .1, label = percentil_obs_theta, 
+             vjust = -0.2, colour = "red")
+
+g_1_theta + g_2_theta
+
+```
+
+10. Cuál es tu conjetura de que la distribución de referencia tenga esa forma?
+
+**R. **
+
+Dado que el estadístico $\lambda_{2}$ depende de las distancias de los datos entre cada grupo, este será afectado de manera importante si hay datos atípicos. En particular, como se mencionaba al inicio del desarrollo de la segunda parte, existe un dato atípico muy distante de los demas, una tormenta electrica donde no se aplicó aerosol, con 358 rayos.
+
+Al generar la distribución de referencia, el grupo en el que se encuentre este valor atípico va a afectar de forma importante el valor de $\lambda_{2}$, y por tanto, también el de $\theta_L$, generando las discontinuidades observadas.
+
+Por ejemplo, para los datos observados, cuando se realizaba un histograma de las respectivas distribuciones, se observa que no eran tan distantes entre los dos grupos si se excluía el dato atípico. Ahora bien, dado que el segundo grupo tiene la distanta afecta por dicho dato, presenta una alta dispersión, y por tanto $\lambda_2^{N}=92.88$  es mucho mayor que $\lambda_2^{S}=17.31$, lo que hace que el $\theta_L^{obs}<1$. 
+
+Dado lo anterior, este estadístico no sería una buena idea para la pregunta que se quire responder, sino más bien en casos donde no existan este tipo de valores extremos. 
+
+En este caso hacer una prueba de hipótesis para la estadística de la
+$L-$dispersión por medio de permutaciones no es la mejor estrategia. Esto es por
+que la hipótesis nula alberga el supuesto de que **todos** los aspectos de la
+distribución de truenos que golpean la tierra son los mismos tanto para las
+tormentas modificadas por aerosoles y las que no lo son. En este caso,
+quisiéramos ser mas laxos y permitir algunas propiedades diferentes entre las
+dos distribuciones.
+
+Usaremos el método de *bootstrap* para calcular la distribución de remuestreo 
+de nuestra estadística observada. Como sabemos, el método de bootstrap nos informa
+de la dispersión de nuestra estadística de interés, que en este caso es la $L-$dispersión. 
+
+11. Escribe el código necesario para implementar un bootstrap no paramétrico.
+Recuerda que el remuestreo debe de respetar el proceso generador de datos.
+
+*Pista:* Sugerimos utilizar la libreria de `rsample`, considera que tu función
+de estimación debe de regresar una tabla, `tibble`, con dos columnas `estimate`
+y `term`, donde se registra el valor estimado y nombre de tu estadistica. Por
+supuesto puedes utilizar otras funciones.
+
+**R. **
+
+Como se plantea anteriormente, deseamos que los procesos generadores de los datos para los dos grupos sean diferentes. Dado lo anterior al generar la distribución de remuestreo con reemplazo debemos diferenciar entre grupos.  
+
+```{r}
+muestra_grupos <- function(){
+  "Genera muestra aleatoria con distinguiendo el proceso generado de los dos \"tipos\" de tormenta"
+  sample_truenos <- truenos  %>% 
+    group_by(aerosol) %>% 
+    sample_frac(size=1,replace = TRUE) %>%
+  ungroup()
+  
+  return(sample_truenos)
+}
+
+muestra_grupos()
+```
+
+Se generan las funciones con dos enfoques distintos. 
+
+```{r}
+theta_boostrap <- function(m=1000){
+  "
+  Devuelve distribución de remuestreo para m repeticiones de los estimadores de theta_L.
+  "
+  tibble(id_muestra = seq(m)) %>% 
+    mutate(muestras = map(1:m, ~muestra_grupos()),
+           thetaL = map(muestras, calc_thetaL)) %>% 
+           select(thetaL) %>% unnest(thetaL)
+}
+
+theta_boostrap_v2 <- function(m=1000){
+  "
+  Emula comportamiento de theta_boostrap() pero utilizando enfoque paralelizado con la función
+  rerun.
+  "
+  theta_sims <- tibble(id_muestra = seq(m)) %>% 
+  mutate(muestras = rerun(m, muestra_grupos()),
+         thetaL = map(muestras, calc_thetaL)) %>% 
+  select(thetaL) %>% unnest(thetaL)
+}
+
+```
+
+Ahora simulamos por bootstrap el estimador $\hat\theta_L$:
+
+```{r theta_bs, cache=TRUE}
+theta_simul <- theta_boostrap_v2(m=5000)
+```
+
+De acuerdo a lo planteado por @Hesterberg, $m=1000$ para la mayoría de aplicaciones es un buen número. Sin embargo, en concordancia con los ejercicios realizados en clase utilizamos $m=5000$.
+
+12. Reporta la dispersión de tu estimador en forma de intervalos con el método 
+más adecuado de los vistos en clase. 
+
+**R. **
+
+Para determinar cuál es el método de intervalos más adecuado para este caso, debemos ver qué forma tiene la distribución de remuestreo, o bootstrap.
+
+Hacemos un gráfico del histograma y el gráfico Q-Q para ver si es apropiado utilizar el método de intervalos normales.
+
+```{r, echo=FALSE, cache=TRUE, fig.align="center", out.width="95%", fig.height=10, fig.with=10}
+mean_bs <- theta_simul$thetaL %>% mean()
+
+g1_theta_bs <- qplot(sample = thetaL, data = theta_simul) + 
+  stat_qq() + stat_qq_line() +
+  xlab("f") + ylab("") + labs(subtitle = "Distribución de remuestreo") 
+
+g2_theta_bs <- ggplot(theta_simul, aes(x=thetaL)) +
+  geom_histogram(bins=30)+ coord_flip() +
+  labs(x = "", subtitle = expression("Distribución bootstrap de "~hat(theta)^'L')) +
+  geom_vline(xintercept = theta_L_obs, color = "red", alpha = 0.5) +
+  geom_vline(aes(xintercept = mean_bs), color = "blue",
+             linetype = "dashed", alpha = 0.8) 
+
+g1_theta_bs + g2_theta_bs
+```
+
+Como podemos observar, la distribución tiene unas colas muy pesadas, y no converge hacia un comportamiento normal. Dado lo anterior, no es adecuado utilizar intervalos normales. 
+
+Dado lo anterior, determinamos dichos intervalos por medio de los cuantiles de la distribución. Se evaluará un intervalo de confianza del 90%. 
+
+```{r}
+theta_muestras <- theta_simul %>% pull(thetaL)
+limites_ic <- quantile(theta_muestras, c(0.05, .5,0.95)) %>% round(5)
+ee_boot <-sd(theta_muestras)
+
+limites_ic
+```
+
+Por otro lado, el error de remuestreo es 0.2022.
+
+
+13. Dado el estimador y los intervalos calculados arriba, escribe un breve resumen. 
+
+**R. **
+
+De la distribución de remuestreo del estimador $\hat\theta_L$ se obtuvo una mediana de 0.18, límites inferior y superior de 0.08, y 0.66 (respectivamente), y un error de remuestreo de 0.20. Dada la evidente no normalidad de la distribución de remuestreo, resulta apropiado utilizar el método de intervalos por percentiles.  
+
+Inicialmente, se deseaba calcular $\hat\theta_L$ para poder establecer inferencia estadística sobre la diferencia en torno a los conteos del número de rayos que impactan el suelo, cuando se aplica o no yoduro de plata (IAg) en las nubes. Como se planteó al inicio, si siguiéramos el camino de prueba de hipótesis consideraríamos una hipótesis nula donde $\theta_L = 1$.
+
+En este caso, estamos viendo qué tan preciso es el estimador que estamos calculando, y a un nivel de 95% de confianza, el intervalo nos plantea que dicho estadístico no es 1. Esto apoya los indicios de que el yoduro de plata disminuya los rayos que tocan el suelo en una tormenta electrica.
+
+Por otro lado, como se ha venido planteando en el desarrollo de este punto, es importante mencionar que dada la existencia de _outliers_ no resulta apropiado utilizar estadísticos que sean afectados de manera sensible de datos extremos, como en este caso. 
+
+# Referencias

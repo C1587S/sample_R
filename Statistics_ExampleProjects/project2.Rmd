@@ -1,0 +1,1233 @@
+---
+title: "Examen final - Otoño 2020"
+author: "Sebastian Cadavid-Sanchez"
+output:
+  pdf_document: default
+  html_document: default
+---
+**Entrega:** Enviar la carpeta que el codigo de solución (.Rmd y funciones
+auxiliares) a mas tardar el 15 de Diciembre antes de las 12:00pm (mediodia), por
+correo electrónico con el título fundamentos-final, un solo documento por
+equipo. No se aceptarán entregas extemporáneas. Será mejor entregar un examen
+resuelto parcialmente, que no entregar nada.
+
+**Instrucciones:**
+  
+* Tus respuestas deben ser claras y debes explicar los resultados, incluye
+también tus procedimientos/código de manera ordenada, y el código comentado.
+
+* Se evaluará la presentación de resultados (calidad de las gráficas, tablas,
+...), revisa la sección de visualización en las notas.
+
+* Las sesiones del Martes 8 y Jueves 10 de Diciembre a las 10 am, serán espacios
+para resolver dudas que puedan surgir del exámen.
+
+* No pueden compartir soluciones entre diferentes equipos, o alumnos del grupo
+001 de esta misma materia.
+
+* Al entregar este examen afirmas que el trabajo se realizó sólo con tu
+compañero de equipo. El material que utilizaste para apoyarte consistió de las
+notas en clase (pdf en canvas), el codigo fuente de las notas en el repositorio
+de Github.
+
+* Al entregar estás dando tu consentimiento para que bajo sospecha y suficiente
+evidencia de copia se anule tu evaluación.
+
+# Preparación de ambiente
+
+Asegurate de tener instalado los paquetes que usamos más en las notas del curso. 
+En particular, si usas `renv` como manejador de ambientes puedes instalarlos con 
+las instrucciones de abajo. Sólo necesitarías descomentarlas.
+
+```{r, echo = TRUE, include=FALSE}
+renv::install("tidyverse")
+renv::install("patchwork")
+renv::install("nullabor")
+renv::install("scales")
+renv::install('diegovalle/mxmaps')
+renv::install("nleqslv")
+renv::snapshot()
+library(tidyverse)
+
+# Escribe las claves unicas de ambos miembros del equipo, para generar una
+# semilla de numeros aleatorios.
+claves_unicas <- c(121950, 191070)
+set.seed(min(claves_unicas))
+```
+
+  
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(patchwork)
+library(nullabor)
+library(mxmaps)
+library(scales)
+library(nleqslv)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, 
+                      fig.align = 'center', cache=TRUE, fig.height = 3,
+                      out.width =  "99%")
+comma <- function(x) format(x, digits = 2, big.mark = ",")
+```
+ 
+ 
+
+# Modelos de conteo 
+
+En el curso hemos estudiado las variables aleatorias Gaussianas para modelar
+eventos aleatorios compuestos de pequeños, pero controlados, efectos. También 
+hemos utilizado variables aleatorias Binomiales para modelar tasas de éxito de
+algún evento binario de interés. En el contexto Bayesiano, hemos utilizado las 
+distribuciones Beta, Gamma-Inversa, y Normal para realizar análisis conjugado 
+con estos modelos. 
+
+En este mini-proyecto, ilustraremos otra familia de distribuciones muy cómunes
+en la práctica. En particular, veremos la distribución **Poisson** como un
+modelo de conteo. Es decir, una variable aleatoria Poisson nos sirve para
+modelar el número de ocurrencias de un evento en un periodo (tiempo) o área
+(espacio) base.
+
+Decimos que $x|\theta \sim \textsf{Poisson}(\theta)$ si los eventos ocurren de
+manera independiente y a una tasa constante. La función de masa de probabilidad 
+esta dada por
+
+$$ p(X = k \, | \, \theta) = \frac{\theta^k \, e^{-\theta}}{k!},$$
+
+donde sabemos que 
+
+$$ \mathbb{E}[x|\theta] = \theta, \qquad  \mathbb{V}[x|\theta] = \theta $$
+
+Al examinar la base de la función de masa de probabilidad notamos que un 
+candidato para un anålisis conjugado es una distribución Gamma. Es decir, 
+un candidato *natural* para una distribución previa para $\theta$ es 
+
+$$\theta \sim \textsf{Gamma}(\alpha, \beta),$$
+
+donde la densidad está dada por
+
+$$ p(\theta) \propto \theta^{\alpha - 1} \, e^{-\beta \, \theta},$$
+
+y tenemos los siguientes momentos 
+
+$$\mathbb{E}[\theta] = \frac\alpha\beta, \qquad  \mathbb{V}[\theta] = \frac{\alpha}{\beta^2}.$$ 
+
+---
+
+**Pregunta 1)** Para una muestra $X_1, \ldots, X_n \overset{iid}{\sim} \textsf{Poisson}(\theta),$ 
+determina la distribución posterior de $\theta,$ y calcula media y varianza de
+la distribución posterior. ¿Podríamos escribir la media posterior como un
+promedio ponderado entre datos e información previa? ¿Cómo interpretas los
+hiper-parámetros $(\alpha, \beta)?$
+
+
+**Solución**
+
+La distribución posterior se define a contuación:
+
+\begin{equation}
+\label{eq:posterior}
+p\left(\theta\mid x\right)=\frac{p\left(x\mid\theta\right)p\left(\theta\right)}{p\left(x\right)}
+\end{equation}
+
+Primero, empezamos definiendo la función de verosimilitud en la ecuación (\ref{eq:posterior}). Dado que nuestro datos $X_1, \ldots, X_n$ se distribuyen idénticamente ${Poisson}(\theta)$, dicha verosimilitud es la siguiente:
+
+$$
+p\left(x\mid\theta\right)  =\frac{e^{-\theta}\theta^{x_{1}}}{x_{1}!}\frac{e^{-\theta}\theta^{x_{2}}}{x_{2}!}\ldots\frac{e^{-\theta}\theta^{x_{n}}}{x_{n}!}
+$$
+Simplificando: 
+
+
+\begin{equation}
+\label{eq:verosimilitud}
+ p\left(x\mid\theta\right) =\frac{e^{-n\theta}\theta^{\sum_{i=1}^{n}x_{i}}}{\prod_{i=1}^{n}x_{i}}
+\end{equation}
+
+Por otro lado, como se mencionó en el inciso, la distribución previa  del parámetro $\theta$ sigue una distribución _gamma_ con parámetros $\alpha$ y $\beta$. Es decir:
+
+\begin{equation}
+\label{eq:prior}
+p\left(\theta\right)=\frac{\beta^{\alpha}}{\Gamma\left(\alpha\right)}\theta^{\alpha-1}e^{-\beta\theta}
+\end{equation}
+
+Así, utilizando la ecuación de la verosimilitud (\ref{eq:verosimilitud}) y la dsitribución _prior_ (\ref{eq:prior}) se tiene lo siguiente para la distribución _posterior_:
+
+
+$$
+p\left(\theta\mid x\right)\propto\frac{\beta^{\alpha}\theta^{\alpha-1}e^{-\beta\theta}}{\Gamma\left(\alpha\right)}\frac{e^{-n\theta}\theta^{\sum_{i=1}^{n}x_{i}}}{\prod_{i=1}^{n}x_{i}}
+$$
+
+Simplificando la anterior expresión:
+
+\begin{equation}
+\label{eq:posterior1}
+p\left(\theta\mid x\right)\propto e^{-\theta(n+\beta)}\theta^{\sum_{i=1}^{n}x_{i}+\alpha-1}
+\end{equation}
+
+De la ecuación (\ref{eq:posterior1}), se puede identificar que la distribución posterior se distribuye _Gamma_ con parámetros $\sum_{i=1}^{n}x_{i}+\alpha$ y $n+\beta$. Matemáticamente, denotamos:
+
+$$
+p\left(\theta\mid x\right)\sim Gamma\left(\sum_{i=1}^{n}x_{i}+\alpha,n+\beta\right)
+$$
+
+Dado lo anterior, de las propiedades de la distribución _Gamma_ podemos calcular el primer y segundo momento de la distribución posterior:
+
+- Varianza:
+
+$$
+\mathbb{V}\left[\theta\mid x\right]=\frac{\sum_{i=1}^{n}x_{i}+\alpha}{\left(n+\beta\right)^{2}}
+$$
+
+-  Promedio:
+
+$$
+\mathbb{E}\left[\theta\mid x\right]=\frac{\sum_{i=1}^{n}x_{i}+\alpha}{n+\beta}
+$$
+Para escribir la anterior expresión como un promedio entre los datos observados y los parámetros de la distribución previa, podemos separar la suma:
+
+$$
+\mathbb{E}\left[\theta\mid x\right]=\frac{\sum_{i=1}^{n}x_{i}}{n+\beta}+\frac{\alpha}{n+\beta}
+$$
+esta expresión se puede reescribir en términos del promedio de los datos observados si se multiplica y divide por $n$ al término $sum_{i=1}^{n}x_{i}$. Por simetría, también podríamos multiplicar y dividir por $\beta$ la segunda parte de la ecuación:
+
+$$
+\mathbb{E}\left[\theta\mid x\right]=\frac{n\bar{x}+\beta(\frac{\alpha}{\beta})}{n+\beta}
+$$
+La anterior expresión nos muestra como la media posterior se puede expresar como una media ponderada entre el promedio de los datos observados, y el ratio de los parámetros de la distribución previa, $\frac{\alpha}{\beta}$. En particular, como se mencionó en clase, entre más datos tengamos, y por tanto mayor sea $n$, la información observada tendrá más peso sobre el promedio de la distribución posterior. 
+
+Los parámetros  $\alpha$ y  $\beta$ de la distirbución previa, los podemos interpretrar como nuestra información inicial de el numero de ocurrencias del evento que nos interesa y la tasa a la que estas ocurrencias ocurren en el tiempo, respectivamente. Estos parámetrps definirán la "forma" de la distribución _Gamma_ que reflejan nuestras creencias iniciales. Como se presentó al reexpresar la media de la distirbución posterior, si el número de datos que tenemos es limitado (i.e $n$ es pequeño), el efecto de dichos parámetros a priori será mayor para definir la media posterior. 
+
+---
+
+Otra variable aleatoria de conteo relevante es la **Binomial Negativa.** Esta 
+distribución sirve para modelar el número de éxitos en una secuencia de experimentos 
+Bernoulli antes de encontrar un número específico de fracasos. 
+
+Decimos que $X|\alpha, \beta \sim \textsf{Neg-Bin}(\alpha, \beta),$ donde $X$ es
+el número de éxitos que contamos antes de $\alpha$ fracasos, cuando cada fracaso
+ocurre con probabilidad $\frac{\beta}{\beta + 1}.$ La función de masa de
+probabilidad se escribe
+
+$$ p(X = k \, | \, \alpha, \beta) = {\alpha + k -1 \choose k} \left(\frac{\beta}{\beta + 1}\right)^\alpha \left(\frac{1}{\beta + 1}\right)^k.$$
+
+Nota que 
+$${\alpha + k -1 \choose k} = {\alpha + k -1 \choose \alpha -1},$$
+es decir, el número de formas que puedes acomodar $\alpha - 1$ fracasos es igual al
+número de formas que puedes acomodar $k$ éxitos cuando realizaste $\alpha + k
+-1$ experimentos y todos los experimentos son independientes. Por otro lado, la
+definición es
+$${\alpha + k -1 \choose k} = \frac{(\alpha + k - 1)!}{k! \, (\alpha - 1)!}.$$
+donde $k! = k \times k-1 \times k-2 \times \cdots \times 1,$ y la función Gamma satisface
+$$\Gamma(\alpha) = (\alpha - 1)!.$$
+
+---
+
+**Pregunta 2)** Bajo el modelo conjugado que escribiste en la pregunta 1, calcula 
+la **distribución predictiva previa** para una observación Poisson. Es decir,
+calcula 
+$$p(y) = \int \textsf{Poisson}(y \,| \,\theta) \textsf{Gamma}(\theta \, | \, \alpha, \beta) \, \text{d}\theta.$$
+
+Verifica tu cálculo utilizando las reglas probabilidad condicional. En especifico,
+utiliza
+
+$$ p(y) = \frac{p(y|\theta)p(\theta)}{p(\theta|y)}.$$
+
+¿Qué distribución marginal tiene $y$ bajo el modelo conjugado?
+
+**Solución**
+
+
+**Nota:** Sin pérdida de generalidad, en el inciso anterior se denotaban las obsrvaciones del conjunto de datos con la letra ${X_{1},\ldots,X_{n}}$, sin embargo, dado el enunciado, de manera análoga ahora se asumirá la notación ${Y_{1},\ldots,Y_{n}}$, para referirse a dicho conjunto. 
+
+Así, al plantear la distribución predictiva previa de una observación del conjunto de datos $y$, es decir, su distribución marginal, debemos integrar la distribución conjunta de la variable $y$y del parámetro $\theta$ sobre el soporte de este último ($\Theta$). Dicha expresión se puede descomponer utilizando las reglas de probabilidad condicional, de tal forma que:
+\begin{equation}
+p\left(y\right)=\int_{\Theta}p\left(y,\theta\right)d\theta=\int_{\Theta}p\left(y\mid\theta\right)p\left(\theta\right)d\theta\label{eq:predprior}
+\end{equation}
+
+De (\ref{eq:predprior}) se puede observar que dicha expresión se compone de la verosimilitud de $y$ y de la distribución prior de $\theta$. Por otro lado, dado que el soporte del parámetro $\theta$ va de cero a infinito, se tiene:
+
+\begin{equation}
+p(y)=\int_{0}^{\infty}p\left(y\mid\theta\right)p\left(\theta\right)d\theta\label{predprior2}
+\end{equation}
+
+Reemplazando las expresiones de $p\left(y\mid\theta\right)$ y $p\left(\theta\right)$, se llega a lo siguiente:
+
+$$
+p(y)=\int_{0}^{\infty}\frac{\theta^{y}e^{-\theta}}{y!}\frac{\beta^{\alpha}}{\varGamma\left(\alpha\right)}\theta^{\alpha-1}e^{\beta\theta}d\theta
+$$
+
+Reordenando términos en la anterior expresión sacando de la integral a los términos que no dependen de $\theta$:
+
+$$
+p(y)=\frac{\beta^{\alpha}}{\varGamma\left(\alpha\right)y!}\int_{0}^{\infty}e^{-\theta\left(\beta+1\right)}\theta^{y+\alpha-1}d\theta
+$$
+
+De la anterior expresión podemos identificar que dentro de la integral, si multiplicamos por el término $\left(\beta+1\right)^{y+1}/\varGamma\left(y+\alpha\right)$, se encuentra el núcleo de una distribución Gamma con parámetros $\alpha'=y+\alpha$ y $x'=\beta+1$. Dado lo anterior, podemos multiplicar y dividir por el término mencionado y obtenemos lo siguiente:
+
+$$
+p(y)=\frac{\beta^{\alpha}}{\varGamma\left(\alpha\right)y!}\frac{\varGamma\left(y+\alpha\right)}{\left(\beta+1\right)^{y+\alpha}}\int_{0}^{\infty}e^{-\theta\left(\beta+1\right)}\theta^{y+\alpha-1}\frac{\left(\beta+1\right)^{y+\alpha}}{\varGamma\left(y+\alpha\right)}d\theta
+$$
+
+Lo anterior, se puede redefinir como:
+
+$$
+p(y)=\frac{\beta^{\alpha}}{\varGamma\left(\alpha\right)y!}\frac{\varGamma\left(y+\alpha\right)}{\left(\beta+1\right)^{y+\alpha}}\int_{0}^{\infty}e^{-\theta x'}\theta^{\alpha'-1}\frac{x'^{y+\alpha}}{\varGamma\left(\alpha'\right)}d\theta
+$$
+
+Así, si se integra $x'\sim Gamma\left(\alpha',\theta\right)$, en
+el soporte de $\theta$, este valor debe ser igual a uno. Al reescribir
+la anterior expresión se tiene:
+
+$$
+p(y)=\frac{\beta^{\alpha}}{\varGamma\left(\alpha\right)y!}\frac{\varGamma\left(y+\alpha\right)}{\left(\beta+1\right)^{y+\alpha}}
+$$
+Dado que $\varGamma\left(z\right)=(z-1)!$, entonces $p(y)$ se puede
+re-escribir como:
+
+$$
+p(y)=\left(\frac{\beta}{\beta+1}\right)^{\alpha}\left(\frac{1}{\beta+1}\right)\frac{\left(y+\alpha-1\right)!}{\left(\alpha-1\right)!y!}=\left(\frac{\beta}{\beta+1}\right)^{\alpha}\left(\frac{1}{\beta+1}\right)\left(\begin{array}{c}
+y+\alpha-1\\
+\alpha-1
+\end{array}\right)
+$$
+De lo planteado en el enuciando, decimos que $y\mid\alpha,\beta\sim\textsf{NegBin(\ensuremath{\alpha},\ensuremath{\beta})}$ donde $y$ es el número de éxitos que contamos antes de $\alpha$ fracasos, cuando cada fracaso ocurre con probabilidad $\frac{\beta}{\beta+1}.$ Así, la función de masa de probabilidad se escribe:
+
+\begin{equation}
+p(y)=\left(\frac{\beta}{\beta+1}\right)^{\alpha}\left(\frac{1}{\beta+1}\right)\left(\begin{array}{c}
+y+\alpha-1\\
+\alpha-1
+\end{array}\right)\label{eq:ybinneg}
+\end{equation}
+
+---
+
+En la práctica, es útil extender el modelo Poisson como sigue
+\begin{align}
+  x_i | t_i, \theta &\sim \textsf{Poisson}(\lambda_i), \\
+  \lambda_i &= t_i \theta, 
+\end{align}
+
+donde la tasa de ocurrencia $\lambda_i$ ha sido descompuesta en un producto que incorpora la exposición $t_i$ y una tasa de ocurrencia por unidades expuestas $\theta.$ En este contexto usualmente tenemos observaciones para $x_i$ y $t_i$ pues conocemos el parámetro de exposición. Por ejemplo, si $x_i$ es el número de personas que se enferman de gripe en la $i$-ésima ciudad en un año, entonces $\theta$ denota la tasa anual por persona de enfermarse de gripe en una población de tamaño $t_i$.
+
+--- 
+
+**Pregunta 3)** Supongamos que tenemos datos $X_1, \ldots, X_n \sim \textsf{Poisson}(\lambda_i),$ con $\lambda_i = t_i \theta$ para $i = 1, \ldots,n.$ Utilizando el modelo conjugado, ¿cuál es la distribución posterior de $\theta?$
+
+**Solución**
+
+Al igual que en el inciso 1, empezamos definiendo la función de verosimilitud de la siguiente manera:
+
+$$
+p\left(x\mid\theta\right)=\frac{e^{-\lambda_{1}}\lambda_{1}^{x_{1}}}{x_{1}!}\frac{e^{-\lambda_{2}}\lambda_{2}^{x_{2}}}{x_{2}!}\ldots\frac{e^{-\lambda_{n}}\lambda_{n}^{x_{n}}}{x_{n}!}
+$$
+reemplazando $\ensuremath{\lambda_{i}=t_{i}\theta}$ para cada $i$, se tiene:
+
+$$
+p\left(x\mid\theta\right)=\frac{e^{-t_{1}\theta}t_{1}\theta^{x_{1}}}{x_{1}!}\frac{e^{-t_{2}\theta}t_{2}\theta^{x_{2}}}{x_{2}!}\ldots\frac{e^{-t_{n}\theta}t_{n}\theta^{x_{n}}}{x_{n}!}
+$$
+reagrupando términos:
+
+\begin{equation}
+p\left(x\mid\theta\right)=\frac{e^{-\theta\sum_{i=1}^{n}t_{i}}\theta^{\sum_{i=1}^{n}x_{i}}\prod_{i=1}^{n}t_{i}}{\prod_{i=1}^{n}x_{i}!}\label{eq:verosimilitud_t}
+\end{equation}
+
+Reemplazando (\ref{eq:verosimilitud_t}) en la expresión de la distribución posterior, se tiene:
+
+$$
+p\left(\theta\mid x\right)\propto\frac{\beta^{\alpha}\theta^{\alpha-1}e^{-\beta\theta}}{\Gamma\left(\alpha\right)}\frac{e^{-\theta\sum_{i=1}^{n}t_{i}}\theta^{\sum_{i=1}^{n}x_{i}}\prod_{i=1}^{n}t_{i}}{\prod_{i=1}^{n}x_{i}!}
+$$
+
+simplificando la anterior expresión:
+
+\begin{equation}
+p\left(\theta\mid x\right)\propto\theta^{\sum_{i=1}^{n}x_{i}+\alpha-1}e^{-\theta\left(\sum_{i=1}^{n}t_{i}+\beta\right)}\label{eq:posterior3}
+\end{equation}
+
+De la ecuación (\ref{eq:posterior3}), se puede identificar que en este caso la distribución posterior se distribuye _Gamma_ con parámetros $\sum_{i=1}^{n}x_{i}+\alpha$ y $\sum_{i=1}^{n}t_{i}+\beta$. Matemáticamente, denotamos:
+
+$$
+p\left(\theta\mid x\right)\sim Gamma\left(\sum_{i=1}^{n}x_{i}+\alpha,\sum_{i=1}^{n}t_{i}+\beta\right)
+$$
+
+---
+
+# Caso de estudio: Tasas de mortalidad
+
+El INEGI publica para cada año los registros de fallecimiento junto con la causa principal de muerte. En esta sección utilizaremos los modelos descritos anteriormente para inferir tasa de fallecimiento por Neumonía para cada uno de los municipios/delegaciones del país. Contamos con los últimos 5 años de los registros de defunción.
+
+---
+
+### Carga y preparación de datos
+
+
+**Pregunta 4)** Empecemos explorando los datos. Carga los datos para un año que
+elijas. Encontrarás en los archivos en `datos/poblacion/defunciones/<año>` los
+registros de defunciones por Neumonía para el `<año>` que escojas.
+
+**Solución**
+
+Para este ejercicio decidimos elegir los datos de defunciones del año 2019. Los datos tienen 30,327 columnas, tres variables numéricas (`entidad`, `municipio`, y `edad`) , y dos categóricas (`sexo`, y `edad_grupos`).
+
+```{r carga defunciones de un año}
+data_def <- read.csv("poblacion/defunciones/2019/defunciones_registradas.csv")
+glimpse(data_def)
+```
+
+
+```{r, echo=FALSE}
+knitr::include_graphics('imgs/summary_defs2019.png')
+```
+En general, para los datos seleccionados de 2019 encontramos lo siguiente:
+
+- Hay 30,327 observaciones, y no hay valores faltantes para ninguna variable. 
+- Se dispone de 5 variables. Tres numéricas, `entidad`, `municipio` y `edad`; y dos categóricas, `sexo` y `edad_grupos`. Sin embargo, cabe aclarar que, dado que las variables de entidad y municipio son identificadores, no se explota su naturaleza numérica para otros propósitos. 
+- En particular, para este año se encuentran 33 valores distintos para `entidad`, dado que el 99 indica la no identificación de la entidad federativa.  
+- A modo similar, para la variable `municipio` el valor 999 indica la no identificación de la entidad municipal. 
+- En cuanto a la variable `sexo` se encuentra que las defunciones de hombres (54.7%)  dominaron en proporción a las de las mujeres.
+- El promedio de la edad fue de 70.9 años. Sin embargo, cabe anotar que el valor máximo que pueden tomar las observaciones de esta variable es de 998, lo que puede denotar que en estos casos no se recolectó la información asociada a esta variable. Para analisis posteriores se deben filtrar dichos valores. 
+- Los grupos de edad con mayor número de muertos por neumonía es de 64 años o más (68%), seguido por las personas entre 25 y 64 años (25.3%). Para las demás categorías los niveles de muertos no supera el 5%. Sin embargo, cabe denotar que para las personas entre 0 y 3 años, la tasa es de 4.6%.
+
+**Pregunta 5)** De igual forma, carga los datos de población que encontrarás en
+`datos_examen/poblacion/demograficos`. Por el momento, no necesitamos los grupos
+de edad (aunque despúes los utilizaremos). Por ahora escribe el codigo necesario 
+para calcular el tamaño de la población en cada uno de los **municipios**.
+
+**Solución**
+
+Para calcular el total de la población en todos los grupos se suman todos los grupos de edad. Dado que cada observación es un municipio de una entidad, no se requiere agrupar.
+
+```{r carga demograficos}
+data_dem <- read.csv("poblacion/demograficos/poblacion_municipios_edad.csv") %>% 
+  mutate(pob_total = p_0a2 + p_3a5 + p_6a11 + p_12a17 + p_18a24 + p_25a64 + pob65_mas)
+  
+glimpse(data_dem)
+# Según Wikipedia en México hay 2,476 municipios, ¿faltan 20 en esta base? Aparecen 2,456
+```
+
+A continuación se presenta un resumen del conjunto de datos original.
+
+```{r, echo=FALSE}
+knitr::include_graphics('imgs/summary_dem.png')
+```
+En general, se resalta la siguiente información:
+- Hay 2,456 observaciones, y no hay valores faltantes para ninguna variable. 
+
+
+**Pregunta 6)** Ahora necesitamos *cruzar* las tablas de defunciones y población para crear una 
+tabla con ambos registros. Para esto necesitarás la función `dplyr::full_join`.
+
+**Solución**
+
+Una vez se creó el dataframe uqe incluye la población total por municipio, `data_dem`, se procede a realizar un `full_join` con el _dataframe_ de defunciones de 2019, `data_dem`. En particular, esta operación se hace utilizando las colunmnas de `entidad` y `municipio`. 
+
+```{r cruce defunciones y poblacion, echo=FALSE, warning=FALSE}
+join_data <- dplyr::full_join(data_def, data_dem)
+
+glimpse(join_data)
+```
+
+Como se observa anteriormente, la tabla resultante tiene 15 variables, y 31,286 observaciones.
+
+**Pregunta 7)** Con esto tendrás conocimiento de cómo cargar la información
+relevante (número de defunciones y población total en cada municipio). Sin
+embargo, tenemos información para las defunciones de los últimos 5 años. Carga
+la información que encontrarás en `/defunciones/` y agrupa de tal forma que
+tengas una tabla como la anterior. **Importante: ** Para fines de este proyecto
+no necesitamos los conteos por año, sólo el agrupado. Es decir, el número de
+defunciones totales de los 5 años por municipio.
+
+**Solución**
+
+Para el desarrolo de este punto se creó la función `carga_defs`, que se encarga de ller los datos en csv para el año seleccionado. Por otro lado, la función `carga_masiva` se encarga de cargar los datos de defunciones para todos los años, de 2015 a 2019, y posteriormente agruparlos para a nivel municipio. 
+
+```{r carga masiva, echo = FALSE, message = FALSE, warning = FALSE}
+
+
+# función para cargar los datos
+carga_defs <- function(anio){
+  path <- paste0("./poblacion/defunciones/", anio, "/defunciones_registradas.csv")
+  read.csv(path) %>% mutate(anio=anio)
+}
+# función de carga de datos de todas las defunciones 
+carga_masiva <- function(){
+  tibble(anio =seq(2015,2019)) %>% 
+    mutate(defunciones = map(anio, carga_defs)) %>% 
+    pull(defunciones) %>% 
+    reduce(rbind) %>% 
+    filter(edad<2000) %>% 
+  # se agregan por municipio antes de hacer el join 
+  group_by(entidad, municipio) %>%
+    dplyr::summarize(total_defs=n()) %>% 
+    filter(entidad!= 99 || municipio!=999) %>% 
+  # join con poblacion total
+  dplyr::full_join(data_dem) %>% 
+    na.omit() 
+}
+# genera el conjunto de datos para todos los años de 2015 a 2019
+full_ds <- carga_masiva() %>% select(entidad, municipio, nom_ent, nom_mun, pob_total, total_defs)
+# conteos agregados para los 5 años de defunciones y población total
+glimpse(full_ds) 
+```
+
+- Luego de filtrar a que la edad de las personas no haya sido mayor a 200 años, se pasa de tener  119,402 a 118,990 observaciones. 
+- Por otro lado, al filtrar el número de municipio a aquellos que no sean 99, y entidades diferentes a 99, se piede una observación. Agrupando por municipios se pasa de tener 2,140 observaciones a 2,110.
+- Aparte de los didentificadores territoriales, se seleccionarion las columnas relevantes para el análisis de datos posterior, es decir, población total, y total de defunciones por neumonía. 
+
+_Nota: Cabe anotar que se está asumiendo que la población tiene un patrón constante en el tiempo. Y las muertes por neumonía un patrón dinámico. Para ajustar estos dos comportamientos podríamos agregar los datos de la población total para cada año._
+
+--- 
+
+### Cálculo de estadístico de interés
+
+Lo que nos interesa en particular son las tasas de mortalidad anual en los
+municipios del país. Para esto utilizaremos el modelo Poisson que vimos en la
+primera parte. Si denotamos por $y_i$ el número total de defunciones por neumonia
+en el $i$-ésimo municipio; $\theta_i,$ la tasa de mortalidad por individuo por
+año, entonces 
+
+$$ y_i \, | \, n_i, \theta_i \sim \textsf{Poisson}(\lambda_i),$$
+
+donde $n_i$ denota la población total del municipio $i$-ésimo y 
+$\lambda_i$ la tasa con la que ocurren las  muertes por neumonía en el periodo
+observado para la población del municipio $i$-ésimo.
+
+**Pregunta 8)** ¿Cómo escribirías $\lambda_i$ en función de $\theta_i$?
+
+**Solución**
+
+Dado lo planteado anteriormente, podemos inferir que la relación entre $\lambda_{i}$ y $\theta_{i}$ está determinada por el factor de exposición, el cual nos ayuda a cambiar las unidades de tiempo (o espacio). ^[Gracias Alfredo por la aclaración realizada en el foro de discusión]. En este caso, $\lambda_{i}$ es la tasa de muertes por neumonía que ocurren en el periodo de 5 años analizado (de 2015 a 2019) en el municipio $i$, por lo que, en promedio, es 5 veces la tasa de muertes por año, $\theta_{i}$. En este sentido, podemos definir:
+
+$$
+\lambda_{i}=5\theta_{i}
+$$
+
+A modo más general, extrapolando al desarrollo de los incisos anteriores, si denotamos $t_{i}$ como el número de años que se analizan en el municipio $i$, se puede expresar:
+
+\begin{equation}
+\lambda_{i}=t_{i}\theta_{i}\label{eq:lambdatheta}
+\end{equation}
+
+Así, es claro que se puede expresar la tasa de ocurrencia en términos del facotr de exposición.
+
+--- 
+
+Ahora, utilizaremos un mapa para ver si podemos observar algún patrón en las tasas de mortalidad por individuo por año $\theta_i.$ Por ejemplo, podríamos esperar que algunas zonas del país concentren las tasas mas altas. Por ejemplo, podemos crear mapas con los municipios con las tasas mas bajas y altas. Digamos que sólo queremos ver el 25\% mas bajo y alto. Los mapas los obtenemos con las funciones `mxmaps::mxmunicipio_choropleth`.
+
+La estructura que necesita esta función es una tabla con una columna que se 
+llame `region` donde venga el codigo identificador del municipio. Por ejemplo, 
+para el municipio `001` en el estado `24` el codigo de region será `24001`. Otra 
+columna necesaria es el valor con el que "coloreará" el municipio en el mapa y
+se tiene que llamar `value` y puede ser una variable `Boolean` o `double`. 
+
+**Pista.** Para este punto, podrías necesitar la función `dplyr::row_number`. De
+igual forma podrías ocupar una indicadora para decir cuáles son los municipios
+con las tasas mas altas y cuáles son los que tienen las mas bajas. Al final,
+podrías presentar esto como dos mapas separados.
+
+**Solución**
+
+Inicialmente, definimos los estadísticos de interés, correspondientes a las tasas de defunciones por neumonía de 2015 a 2019 ($\lambda_i.$), y la tasa de defunciones por año, $\theta_i.$. Posteriormente, se generan las variables `mas_bajo` y `mas_alto` para indentificar aquellos municipios que estuvieron en el cuartil más bajo o aquellos que estuvieron en el cuartíl más alto, respectivamente. De igual forma, se crea la variable `region` que es el indicador a ser computado con las funciones de la librería `mxmaps`.
+
+```{r}
+xtremevals_ds <- full_ds %>% mutate(tasa_mort_ind = total_defs/pob_total, theta_i=tasa_mort_ind/5, lambda_i = tasa_mort_ind,
+                         region = case_when(nchar(municipio)==1~paste0(entidad, "00",municipio),
+                                  nchar(municipio)==2~paste0(entidad, "0",municipio),
+                                  nchar(municipio)==3~paste0(entidad, municipio)))
+# cuantiles
+qtls <- xtremevals_ds %>% pull(theta_i) %>% quantile()
+p25 <- as.numeric(qtls[2] )
+p75 <- as.numeric(qtls[4])
+# indicadora para más altos y más bajos
+xtremevals_ds <- xtremevals_ds %>% mutate(mas_bajo = theta_i <= p25,
+                                          mas_alto = theta_i >= p75)
+
+head(xtremevals_ds)
+```
+
+- Mapa para los municipios con las tasas más bajas
+
+```{r, warning=F, cache=T, include=FALSE}
+# xtremevals_ds %>% rename(value=mas_bajo) %>%
+#                   mxmaps::mxmunicipio_choropleth(
+#                                title = "Municipios con tasas de mortalidad por neumonía más bajas (<= percentil 25)")
+```
+
+```{r, echo=FALSE}
+knitr::include_graphics('imgs/pbajos.png')
+```
+
+- Mapa para los municipios con las tasas más altas
+
+```{r, warning=F, cache=T, include=FALSE}
+# xtremevals_ds %>% rename(value=mas_alto) %>%
+#                   mxmaps::mxmunicipio_choropleth(
+#                                title = "Municipios con tasas de mortalidad por neumonía más altas (>= percentil 25)" )
+```
+
+```{r, echo=FALSE}
+knitr::include_graphics('imgs/paltos.png')
+```
+
+- Entidades y municipios con las tasas de defunción por neumonía más altas y más bajas
+
+```{r, warning=F, cache=T, include=FALSE}
+# xtremevals_ds %>% mutate(value=case_when(mas_alto==TRUE~1, mas_bajo==TRUE~-1, TRUE~0)) %>%
+#                   mxmaps::mxmunicipio_choropleth(
+#                                title = "Municipios con tasas de mortalidad por neumonía")
+```
+
+```{r, echo=FALSE}
+knitr::include_graphics('imgs/altosybajos.png')
+```
+
+Al observar los tres mapas presentados anteriormente, es claro que muy pocas entidades tienen una composición definida en cuanto a tener los municipios con las tasas más altas o más bajas de defunciones por neumonía. De las 32 entidades que conforman el territorio Mexicano, solo se observa un patrón definido para el Estado de Baja California, donde se observa un patrón dominante a tener altas tasasde muertes por neumonía. 
+
+Sin embargo, para los demás Estados de la República, los patronos no son claros. 
+
+
+¿Qué observas? No hay patrón tan claro. Especialmente si observamos lo que
+sucede en Chihuahua, Durango y Coahuila, donde tenemos municipios de ambas
+categorías. ¿Cómo puede ser que un mismo estado tenga las tasas mas altas y
+bajas al mismo tiempo?
+
+¡El problema es el tamaño de muestra! Considera un municipio de 1,000
+habitantes. Muy probablemente en 5 años no veamos una muerte por neumonía, lo
+cual convertiría la tasa observada en 0. Sin embargo, si ocurriera una muerte
+entonces la tasa sería de 1/5,000 por año, lo cual sería muy elevado con
+respecto a otros municipios con poblaciones grandes y mayor número de casos.
+
+## Inferencia Bayesiana para tasa de mortalidad
+
+Utilizaremos inferencia Bayesiana para regularizar el problema. Seguiremos 
+suponiendo que 
+
+$$ y_i \, | \, n_i, \theta_i \sim \textsf{Poisson}(\lambda_i),$$
+
+pero ahora necesitamos una distribución previa para $\theta_i.$ Sabemos, por lo
+anterior, que el modelo Poisson-Gamma es conjugado. Por lo tanto requerimos una
+distribución Gamma. Sólo falta elicitar los hiperparámetros. 
+
+No todos somos expertos en salud ni tenemos conocimiento previo. Sin embargo,
+podemos visitar esta [página](https://ourworldindata.org/pneumonia) para darnos
+una idea de las tasas de mortalidad por neumonía en el resto del mundo.
+
+A continuación se muestra las tasas de mortalidad para los últimos años para
+algunos paises y la region de America Latina y el Caribe.
+
+```{r, echo = FALSE}
+knitr::include_graphics('imgs/mortalidad-neumonia.png')
+```
+
+Considera los siguientes puntos: 
+  
+  - Las tasas anteriores han sido calculadas con un método que incorpora la
+  estructura demográfica de cada país y la estandariza con respecto a la
+  pirámide poblacional mundial. En nuestro ejemplo, nuestras tasas no serán
+  ajustada de tal forma (este método se conoce en inglés como *age-standarized
+  mortality rates*).
+  - Las tasas reportadas tienen una base distinta, pues son reportadas con respecto
+  a una población de 100,000 habitantes. Es decir, son tasas de mortalidad
+  anuales para poblaciones de 100K habitantes. Por ejemplo, un valor de 5
+  significa que en promedio 5 habitantes por cada 100K mueren de neumonia al
+  año.
+  
+**Pregunta 9)** Con esto en mente, escribe los límites necesarios para encontrar
+una distribución Gamma adecuada. Encuentra la solución al sistema de ecuaciones
+no lineales por medio de la función `nleqslv::nleqslv`. Escribe tu razonamiento 
+para seleccionar dichos valores. 
+
+**Solución**
+
+Para el desarrollo de este punto inicialmente se realizó el ajuste de la base en la que se presentan las defunciones, al igual que en el ejemplo presentado, se computan las defunciones por neumonía cada 100 mil habitantes. Para tener una idea de como computar nuestra distribución previa, observamos los cuartiles de los datos con respecto a la tasa $lambda_i$.
+
+```{r}
+habs <- 100000
+xtremevals_ds <- full_ds %>% mutate(tasa_mort = ceiling(habs*total_defs/pob_total), theta_i=ceiling(tasa_mort/5), lambda_i = tasa_mort,
+                         region = case_when(nchar(municipio)==1~paste0(entidad, "00",municipio),
+                                  nchar(municipio)==2~paste0(entidad, "0",municipio),
+                                  nchar(municipio)==3~paste0(entidad, municipio)))
+
+xtremevals_ds %>% pull(theta_i) %>% quantile(c(.1, .25, .5, .75, .90, .99))
+p50 <- 11.00
+```
+
+En particular, observamos que los valores de dicho estadístico se concrentan en 11 muertos cada 100 mil habitantes por año. Sin embargo, al observar a los percentiles 25%, y 75%, podemos inferir que la distribución parece tener sesgo hacia la derecha. Lo anterior, nos da una idea de los intervalos razonables sobre los que queremos definir nuestra distribución _prior_.
+
+Así definimos que los límites para los cuales debe estar el valor esperado de nuestra distribución es entre 17 y 100 muertos por cada 100 habitantes para el periodo estudiado.
+
+```{r elicitacion}
+
+limits <- c(4, 31) # escribe los intervalos adecuados aqui
+
+gamma.limits <- function(x){
+  # reparametrizamos para que el problema sea mas "fácil" en términos numéricos.
+  log_alpha <- x[1]
+  log_beta  <- x[2]
+  
+  # definimos las cotas de probabilidad
+  p_cota <- 0.1 # define un valor adecuada
+  c(    pgamma(limits[1], exp(log_alpha), rate = exp(log_beta)) - p_cota,
+    1 - pgamma(limits[2], exp(log_alpha), rate = exp(log_beta)) - p_cota)
+}
+
+# initial_guess <- c(log(1), log(1))
+initial_guess <- c(log(.1), log(.01))
+
+results <- nleqslv(initial_guess, gamma.limits)
+params.prior <- exp(results$x)
+
+print(paste("Parametros prior: alpha=" , round(params.prior[1], 2), ", beta=", round(params.prior[2], 2)))
+```
+
+Una vez se realiza el proceso de optimización de elicitación, encontramos  los mejores parámetros para nuestra distribución _Gamma_ inicial, son $\alpha=1.91$ y $\beta=0.12$.
+
+Para realizar la comparación entre las distribuciones previas que definimos inicialmente y la resultante del proceso de elicitación, a continuación se presentan dos histogramas correspondientes a dichas distribuciones:
+
+```{r, echo=FALSE,  fig.height=4}
+# elicited
+dist.elc <- data.frame("type"=rep("Elicitado", 5000), "x"=rgamma(5000, params.prior[1], params.prior[2]) %>% as.vector())
+dist.gus <- data.frame("type"=rep("Supocición inicial", 5000), "x"= rgamma(5000, exp(initial_guess[1]), exp(initial_guess[2])) %>% as.vector())
+df.prior <- rbind(dist.elc, dist.gus)
+
+df.prior %>% 
+  ggplot() +
+  geom_histogram(aes(x=x)) +
+  geom_vline(aes(xintercept=p50), color="red", linetype="dashed") +
+  facet_wrap(~type, scales = "free_x") +
+  ylab("Frecuencia") 
+```
+
+Como se puede observar en la gráfica anterior, la distribución elicitada concentra su masa de probabilidad en valores alrededor de la media de los datos para $\lambda_i$, es decir, 56 (línea roja punteada), sin embargo, lo hace de manera mucho más suave que la distribución supuesta inicialmente. En particular, la distribución elicitada refleja de mejor manera el comportamiento de los datos, de acuerdo alos percentiles mencionados inicialmente. Incluso, parece reflejar de manera adecuada que en percentil 90 del estadístico es 30. El anterior comportamiento no es visible con la dsitribución supuesta. 
+
+**Pregunta 10)** Grafica los histogramas de una variable aleatoria Gamma con los valores
+iniciales para el problema de optimización y con los finales de dicho algoritmo.
+Esto te servirá de verificación que el método funciona adecuadamente.
+
+**Solución**
+
+Como se plantea anteriormente, a modo de verificación, se realizan los histogramas para 16 combinaciones de los parámetros $\alpha$ y $\beta$. En particular, vemmos como aumentar o disiminuir los valores de los mismos afecta la forma de la distribuciíon previa, y por tanto nos puede ayudarnos a definir cuál es la más apropiada para nuestro problema.  
+
+```{r histogramas elicitacion, fig.height=6}
+init_guess_alpha <- exp(initial_guess[1])
+init_gues_beta <- exp(initial_guess[2])
+
+final_guess_alpha <- round(params.prior[1], 2)
+final_guess_beta <- round(params.prior[2], 2)
+
+mid_alpha <-  (init_guess_alpha+final_guess_alpha)/2
+mid_beta <- (init_gues_beta+ final_guess_beta)/2
+
+params <-expand.grid(c(init_guess_alpha, 1, final_guess_alpha, 5), 
+                     c(init_gues_beta, final_guess_beta, .5, 2))
+colnames(params) <-c('alpha', 'beta')
+
+params %>% mutate(muestras = map2(alpha, beta,~rgamma(5000, .x, .y))) %>% 
+  unnest(muestras) %>%
+  ggplot(aes(x = muestras)) +
+  geom_histogram(aes()) + xlab("Tasa de muertes por año") + ylab("Frecuencia") +
+  geom_vline(xintercept=p50,  color ='red') +
+  facet_wrap(alpha~beta, scales = "free_x", ncol = 4)
+
+```
+
+- Como se observa anteriormente, mayores niveles del parámetso $\alpha$ afectan la simestría de la distribución. Entre mayor sea este parámetro, más simétrica tiende a ser la _prior_ de la distribución _Gamma_. En nuestro caso, detectamos sesgo hacia la derecha de neustro estadístico, por lo que quisieramos que la cola correspondiente tenga más peso, y por tanto no deseamos tanta simestría en la distribución. Esto implica que el valor de $\alpha=1.91$ encontrado por  el algoritmo de optimización parece ser apropiado.
+
+- Por otro lado, con respecto al parámetros $\beta$ se encuentra que este afecta directamente la escala de la distribución y por tanto también su valor esperado. En nuestro caso, de lo analizado anteriormente, queremos que la media del estadístico de interés se encuentre alrededor de 11 (línea roja contínua). La escala apropiada dado el parámetro $\alpha$ selecionado, en nuestro caso es de 0.12.
+
+En particular, bajo el mecanismo de verificación observamos que los resultados encontrados por el algoritmo de optimización para $\alpha$ y $\beta$ hacen un buen trabajo de elicitación, dado el comportamiento que conocemos del estadístico $\theta_i$.
+
+
+**Pregunta 11)** ¿Cómo se compara la distribución a priori con las tasas
+observadas en los municipios? Puedes utilizar histogramas para estas
+comparaciones. Por otro lado, no te preocupes si no se ven identicas. El punto es
+ver que nuestras creencias iniciales se ven coherentes. 
+
+**Solución**
+
+Como se indica en el enunciado, a continuación se grafican los histogramas de la distribución prior elicitada, y el de las tasas observadas en los datos. Para lograr comparabilidad entre las dos distribuciones, se simuló la distribución previa tomando en cuenta los parámetros  $\alpha$ y  $\beta$ elicitados con el mismo número de observaciones en el conjunto de datos (2110).
+
+```{r, fig.height=4, warning=FALSE}
+# computamos una distribución prior con el mismo nro de obs que los datos 
+df_prior <- data.frame(previa =rgamma(nrow(xtremevals_ds), 
+                                      final_guess_alpha, final_guess_beta))
+# gráfico
+mean_data <- mean(xtremevals_ds$theta_i)
+mean_prior <- mean(df_prior$previa)
+xtremevals_ds %>% ggplot() + geom_histogram(aes(x = theta_i, binwidth=0.05),
+                                            fill ='cornflowerblue', alpha = .6) +
+                  geom_vline(xintercept=mean_data,  color ='blue', linetype="dashed") +
+                  geom_histogram(data=df_prior, aes(x = previa, binwidth=0.05), 
+                                 fill ='green3', alpha = .6) +
+                  geom_vline(xintercept=mean_prior,  color ='green', linetype="dashed") +
+                  xlab("Tasa anual de muertes por neumonía") + ylab("Frecuencia") 
+
+```
+Como se puede observar en los histogramas presentados, la distribución previa elicitada (histograma verde) y la distribución observada de los datos (histograma azul) para el estadístico $\theta_i$ se comportan de manera muy similar. En particular, también están centradas en valores muy cercanos, 15.53 (línea verde punteada) para la distribución observada, y 14.92 (línea azul punteada)  para la distribución previa. 
+
+Lo anterior, nos lleva a pensar que nuestras creencias iniciales con respecto al estadístico $\theta_i$ son coherentes con lo observado por los datos.
+
+**Pregunta 12)** Utiliza un gráfico de dispersión para comparar las tasas
+observadas contra la población del municipio. ¿Qué observas? Utiliza los ejes en
+escala logaritmica. Para esto checa la función: `ggplot2::scale_x_log10` y
+`ggplot2::scale_y_log10`
+
+```{r, fig.height=4}
+xtremevals_ds %>% ggplot(aes(y=theta_i, x=pob_total)) +
+  geom_point() +
+  scale_y_log10() + scale_x_log10() +
+  xlab("Log. de la población total") + ylab("Log. de theta_i")
+```
+
+En el gráfico anterior, se puede observar el efecto del tamaño de la muestra y su incidencia sobre $\theta_i$. En particular, vemos que tamaños de la población pequeños están asociados a altas tasas de función cada 100,000 habitantes, y lo mismo sucede para tamaños de la población muy grandes, pero no para tamaños medianos. En general, se observa una tendencia cuadrática en la relación entre e logaritmo de $\theta_i$ y el logarítmo la población . 
+
+Es de esperarse que en municipios con poblaciones pequeñas pese mucho un número reducido de muertes, como se mencionaba en incisos anteriores, lo que hace que las tasas de ocurrencia sean muy elevadas. Por otro lado, este efecto se tiene en municipios grandes por otro factor que podría ser la proporcionalidad, que implica que a mayor número de personas, proporcionalmente también será mayor el número de muertos por neumonía, lo que podría afectar de manera positiva los niveles de  $\theta_i$. Visualmente, parece ser el caso que tamaños medianos de la población equilibran estos dos efectos sobre el estadístico de interés. 
+
+**Pregunta 13)** Ahora usaremos la distribución predictiva **previa** para explorar 
+los posibles valores que tendrían los casos de muerte bajo nuestro modelo para
+municipios de distintos tamaños. Para este punto considera que la predictiva es 
+una mezcla de Poisson con Gamma, como se expresa en
+
+$$p(y|n) = \int \textsf{Poisson}(y | n, \theta) \, \textsf{Gamma}(\theta|\alpha, \beta) \, \text{d}\theta.$$
+o bien, la forma en especifico de la predictiva preevia. ¡Esto ya lo has
+resuelto en la primera parte del examen!
+
+Usa histogramas  para ver los números de muertes en municipios hipotéticos de
+tamaño $n = 10^3, 10^4, 10^5.$
+
+**Solución**
+
+Como se desarrolló en el inciso 2., $y\mid\alpha,\beta\sim\textsf{NegBin(\ensuremath{\alpha},\ensuremath{\beta})}$ donde $y$ es el número de éxitos que contamos antes de $\alpha$ fracasos, cuando cada fracaso ocurre con probabilidad $\frac{\beta}{\beta+1}.$ 
+
+Utilizando los anteriores resultados podemos simular dicha distribución para los distintos valores del tamaño del municipio (número de habitantes). Para lo anterior, construimos una función que nos será de ayuda. 
+
+```{r, fig.height=4, warning=FALSE}
+calc_moda <- function(x) {
+  "Función para calcular la mode"
+  valores_x <- unique(x)
+  moda = valores_x[which.max(tabulate(match(x, valores_x)))]
+  return(moda)
+}
+
+hist_predprior <- function(alpha, beta, n){
+  tam_mun = n
+  r_negbin <- alpha
+  p_negbin <- beta
+  
+  df_predprior <- data.frame(pred= rnbinom(n = tam_mun, size = r_negbin, prob = p_negbin))
+  mean_predprior <- df_predprior$pred %>% mean() %>% round(3)
+  moda_predprior <- calc_moda(df_predprior$pred)
+  sd_predprior <- sd(df_predprior$pred) %>% round(3)
+  
+  # Se debe definir cuanto es la media de la BinNeg:
+  titulo <- paste("Simulación para municipio de tamaño", tam_mun, "habitantes")
+  df_predprior  %>% ggplot() + geom_histogram(aes(x = pred),
+                                              fill ='gray', alpha = .6) +
+                    geom_vline(xintercept=mean_predprior,  color ='red', linetype="dashed") +
+                    geom_vline(xintercept=moda_predprior,  color ='blue', linetype="dashed") +
+                    xlab("Muertes por neumonía") + ylab("Frecuencia") +
+                    ggtitle(titulo) +
+          annotate("text", x = 50, y = tam_mun*.08 + tam_mun*.01, color="red", label = paste("Media:",  mean_predprior), parse = TRUE) +
+          annotate("text", x = 50, y = tam_mun*.08 , color="blue", label = paste("Moda:", moda_predprior), parse = TRUE) +
+          annotate("text", x = 50, y = tam_mun*.08 - tam_mun*.01, color="black", label = paste("Sd:", sd_predprior), parse = TRUE) 
+}
+  
+```
+
+A continuación se presentan los histogramas para los diferentes valores del tamaño del municipio:
+
+```{r, fig.height=4}
+for (tamanio in c(10^3, 10^4, 10^6)){
+  hist_predprior(final_guess_alpha, final_guess_beta, n=tamanio) %>% print()
+}
+```
+
+Como se puede observar en las simulaciones realizadas, a medida que se aumenta el tamaño de la muestra, también se va haciendo más larga la cola derecha de la distribución predictiva, lo que implica que se da espacio para predecir valores de conteos de muertes por neumonía más elevados. Ajustando el comportamiento que notamos en el inciso anterior. 
+
+**Pregunta 14)** Calcula los valores posteriores de las tasas de mortalidad bajo
+nuestro modelo bayesiano y compara con los estimadores de máxima verosimilitud.
+Para esto puedes utilizar un gráfico de dispersión cómo el visto en clase o los
+anteriores. ¿Observas regularización en nuestras estimaciones? Para este punto,
+utiliza las tasas observadas (MLE) y las tasas esperadas posteriores (MAP).
+
+**Solución**
+
+Para responder a este punto utilizaremos gráficos de dispersión e histogramas.
+
+```{r, fig.height=4}
+ sim_params <- function(m, pars){ 
+   alpha <- pars[1]
+   beta  <- pars[2]
+  # simular thetas
+  sims <-  tibble(theta = rgamma(m, alpha, beta) )
+  # simular conteos
+  sims <- sims %>% mutate(fallecidos = rpois(m, lambda=theta)) 
+  sims
+ }
+
+# Definimos los parámetrospara la simulación
+m <- 10000
+alpha_prior = final_guess_alpha
+beta_prior = round(params.prior[2], 2)
+sum_xi <- xtremevals_ds$tasa_mort   
+n <- nrow(xtremevals_ds)
+
+# distribuciones simuladas y observadas
+sims_observada <- data.frame("theta"=xtremevals_ds$theta_i, "fallecidos"=xtremevals_ds$total_defs, Distribucion="Verosimilitud")
+# sims_inicial <- sim_params(m, c(final_guess_alpha, final_guess_beta))  %>% mutate(Distribucion="Inicial")
+sims_posterior <- sim_params(m, c(sum_xi + final_guess_alpha, final_guess_beta + n)) %>% mutate(Distribucion="Posterior")
+
+sims <- bind_rows(sims_observada, sims_posterior) 
+
+ggplot(sims, aes(x = theta, y = fallecidos, colour = Distribucion)) + geom_point()
+```
+Como vemos en el gráfico anterior, la distribución posterior es acorde a la información que utilizamos al inicio. En particular, es muy notorio como disminuye su dispersión con respecto a la inicial una vez aprende de los datos de la muestra. De igual forma, cabe resaltar que para la distribución, el número de fallecidos se encuentra entre valores entre 0 y 17, mientras que para la distribución inicial estos valores van entre 0 y 120.
+
+El anterior comportamiento también se puede visualizar con los siguientes dos histogramas:
+
+
+```{r, fig.height=4}
+hist_theta <- bind_rows(sims_observada, sims_posterior) %>%
+  ggplot(aes(x = theta, fill = Distribucion)) + 
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ylab("Frecuencia") + xlab("") + ggtitle("Tasa anual de fallecidos por neumonía cada 100 mil habitantes") 
+
+hist_fallecidos <- bind_rows(sims_observada, sims_posterior) %>%
+  ggplot(aes(x = fallecidos, fill = Distribucion)) + 
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ylab("Frecuencia") + xlab("") + ggtitle("Conteos de fallecidos por neumonía al año por cada 100 mil habitantes") + 
+  theme(legend.position = "none") 
+
+hist_theta / hist_fallecidos
+```
+
+En cuanto a regularización podemos hacer dos comentarios. Es posible notar que en este caso, las estimaciones psoterior se encuentran dentro de una zona de alta probabilidad de la verosimilitud, por lo que la distribución posterior no se movió en gran medida de esta zona. Sin embargo, si se redujo en gran medida la variabilidad del estimador, acumulando casi la totalidad de la masa de probabilidad en niveles cercanos a 5. 
+
+Al igual que en clase, a continuación graficamos únicamente la posterior junto a la respectiva media de la tasa de fallecidos por neumonía y el parámetro $\theta_i$. 
+
+
+```{r,  fig.height=4}
+medias_post <- sims %>% filter(Distribucion == "Posterior") %>% 
+                        select(-Distribucion) %>%
+                        summarise(across(everything(), mean)) 
+                  
+medias_post$fallecidos <- medias_post$fallecidos %>% ceiling()
+
+plt_post <- ggplot(sims %>% filter(Distribucion == "Posterior"), aes(y = theta, x = fallecidos)) +
+  geom_point(colour = "#00BFC4") +
+  geom_point(data = medias_post, size = 5, colour = "black") 
+
+
+medias_obs <- sims %>% filter(Distribucion == "Posterior") %>% 
+                        select(-Distribucion) %>%
+                        summarise(across(everything(), mean)) 
+                  
+medias_obs$fallecidos <- medias_obs$fallecidos %>% ceiling()
+
+plt_obs <- ggplot(sims %>% filter(Distribucion == "Verosimilitud"), aes(y = theta, x = fallecidos)) +
+  geom_point(colour = "green") +
+  geom_point(data = medias_obs, size = 5, colour = "black") 
+
+
+plt_post/ plt_obs
+```
+
+Como se observa en la gráfica anterior, la media del theta y el número de fallecidos se encuentran en niveles coherentes para la psoterior si se compara con lo observado con los datos (alrededor de 5).
+
+**Pregunta 15)** Utiliza la distribución predictiva *posterior* para verificar
+el ajuste del modelo. Para esto, escoge tres municipios al azar de distintos
+tamaños (chico, mediano, grande) ~~y haz un *lineup* para cada uno para observar
+si las predicciones posteriores son consistentes con los datos.~~
+Grafica un histograma y compara con el número
+observado de defunciones.
+
+**Solucion**
+
+Para poder computar la predictiva posterior, primero realizamos su derivación.
+
+La distribución predictiva posterior se define como la probabilidad de observar un nuevo punto de los datos, condicionado a que ya observamos un vector de datos. Es decir:
+
+$$p\left(y^{nuevo}\mid\underline{y}\right)$$
+Podemos utilizar los resultados que ya tenemos y la regla de Bayes para poder encontrar una expresión para la predictiva posterior. En particular, podemos encontrar una relación en torno a la anterior ecuación utilizando la regla de Bayes:
+
+$$p\left(\theta\mid y^{nuevo},\underline{y}\right)=\frac{P\left(y^{nuevo}\mid\theta,\underline{y}\right)P\left(\theta\mid\underline{y}\right)}{P\left(y^{nuevo}\mid\underline{y}\right)}$$
+
+En la anterior expresión es importante notar que en el término de la verosimilitud, $P\left(y^{nuevo}\mid\theta,\underline{y}\right)$, hay independencia condicional entre $y^{nuevo}$ y $\underline{y}$ si tenemos conocimiento (condicionamos) del parámetro $\theta$. Lo anterior implica que $P\left(y^{nuevo}\mid\theta,\underline{y}\right)=P\left(y^{nuevo}\mid\theta\right)$, que corresponde a la verosimilitud de la nueva observación. Reescribiendo la anterior expresión despejando para $p\left(y^{nuevo}\mid\underline{y}\right)$, tenemos:
+
+$$
+P\left(y^{nuevo}\mid\underline{y}\right)=\frac{P\left(y^{nuevo}\mid\theta\right)P\left(\theta\mid\underline{y}\right)}{p\left(\theta\mid y^{nuevo},\underline{y}\right)}
+$$
+Retomando los resultados de la primera parte del exámen, sabemos que como se asignó una distribución Gamma a $\theta$, su posterior se puede denotar como $Gamma\left(n\bar{x}+\alpha,n+\beta\right)$. En este caso, debemos hacer la corrección para la nueva observación, de tal forma que $p\left(\theta\mid y^{nuevo},\underline{y}\right)\sim Gamma\left(n\bar{y}+\alpha+y^{nuevo},n+\beta+1\right)$.
+
+Por otra parte, el numerado de la expresión es la multiplicación de una “distribución previa condicional”, $P\left(\theta\mid\underline{y}\right)$, y una expresión de la verosimilitud de la nueva observación. de igual forma, utilizando los resultados de las derivaciones de incisos anteriores, podemos llegar a que dicho término se distribuye como una $Gamma\left(n\bar{y}+\alpha,n+\beta\right)$.
+
+Reemplazando las anteriores expresiones por su equivalente en distribuciones, y simplificando, llegamos a lo siguiente:
+
+$$
+P\left(y^{nuevo}\mid\underline{y}\right)=\frac{\left(n+\beta\right)^{n\bar{y}+\alpha}}{y^{nuevo}!\Gamma\left(n\bar{y}+\alpha\right)}\frac{\Gamma\left(n\bar{y}+y^{nuevo}+\alpha\right)}{\left(n+\beta+1\right)^{n\bar{y}+y^{nuevo}+\alpha}}
+$$
+
+Reescribiendo:
+
+$$
+P\left(y^{nuevo}\mid\underline{y}\right)=\left(\frac{n+\beta}{n+\beta+1}\right)^{n\bar{y}+\alpha}\left(\frac{1}{n+\beta+1}\right)^{y^{nuevo}}\frac{\Gamma\left(n\bar{y}+y^{nuevo}+\alpha\right)}{y^{nuevo}!\Gamma\left(n\bar{y}+\alpha\right)}
+$$
+
+Operando algebraicamente podemos llegar al siguiente resultado:
+
+$$
+P\left(y^{nuevo}\mid\underline{y}\right)=\left(\frac{n+\beta}{n+\beta+1}\right)^{n\bar{y}+\alpha}\left(\frac{1}{n+\beta+1}\right)^{y^{nuevo}}\left(\begin{array}{c}
+n\bar{y}+y^{nuevo}+\alpha-1\\
+y^{nuevo}
+\end{array}\right)
+$$
+
+De lo anterior, podemos observar que la posterior predictiva se distribuye como una Gamma:
+
+$$
+P\left(y^{nuevo}\mid\underline{y}\right)\sim\textsf{NegBin}(n\bar{y}+\alpha,\beta+n)
+$$
+
+Una vez definimos nuestra distribución predictiva posterior, nos es factible utilizarla para verificar la coherencia de nuestro modelo. En este caso adaptaremos el código disponible en las notas de clase.
+
+```{r,  fig.height=4}
+# se ajusta para que dependa de alpha y beta
+crear_sim_rep <- function(x){
+  n <- length(x)
+  suma <- sum(x)
+  sim_rep <- function(rep){
+    # se samplea una parametro lambda (theta en este caso) de la posterior
+  lambda <- rgamma(1, n*mean(x) + final_guess_alpha, n + final_guess_beta) 
+    # se usa el lambda obsenido para simular una distribución del mismo tamaño de la muestra
+  x_rep <- rpois(n, lambda)
+  tibble(rep = rep, x_rep = x_rep)
+  } }
+
+# simulación
+x <- xtremevals_ds$total_defs
+sim_rep <- crear_sim_rep(x)
+
+# lineup
+lineup_tbl <- map(1:4, ~ sim_rep(.x)) %>%
+                bind_rows() %>%
+                bind_rows(tibble(rep = 6, x_rep = x)) 
+
+# gráfica
+ggplot(lineup_tbl, aes(x = x_rep)) + geom_histogram(bins = 30) + facet_wrap(~rep, scales = "free")
+```
+
+
+Como podemos ver en este ejercicio de lineups donde sampleamos un valor de $\theta_i$ y después lo usamos para simular tamaños de la muestra de una distribución Poisson, parece ser que nuestras distribuciones predictivas distan en gran medida de lo observado por los datos. En particular, en los datos la distribución acumula casi toda su masa en valores cercanos a 56. Nuestra predictiva psoterior tiende a distribuir la masa de probabilidad alrededor de otros valores, sin reflejar el sesgo de los datos. Para un refinamiento de este ejercicio sería apropiado tratar de mejorar este comportamiento ajustando la distribución inicial. 
+
+Los municipios que seleccionamos de tamaño pequeño, mediano y grande para este ejercicio fueron San Lorenzo Victoria (Oaxaca), 	Santa Cruz Amilpas (Oaxaca), y Zapotlán el Grande (jalisco), respectivamente. A continuación, vamos a extraer sus tasas de defunciones anuales y a compararlas con la simulación de una predictiva posterior. 
+
+**Municipio tamaño 10^3**
+
+```{r}
+xtremevals_ds %>% ungroup() %>% filter(pob_total > 900 & pob_total < 1100) %>% sample_n(size=1)
+```
+
+```{r}
+theta_mun_peq <- xtremevals_ds %>% filter(nom_mun == "San Lorenzo Victoria") %>% pull(theta_i)
+```
+
+
+**Municipio de tamaño 10^4**
+
+```{r}
+xtremevals_ds %>% ungroup() %>% filter(pob_total > 9900 & pob_total < 10100) %>% sample_n(size=1)
+```
+
+```{r}
+theta_mun_med <- xtremevals_ds %>% filter(nom_mun == "Santa Cruz Amilpas") %>% pull(theta_i)
+```
+
+**Municipio de tamaño 10^5**
+```{r}
+xtremevals_ds %>% ungroup() %>% filter(pob_total > 99000 & pob_total < 101000) %>% sample_n(size=1)
+```
+
+```{r}
+theta_mun_gra <- xtremevals_ds %>% filter(nom_mun == "Zapotlán el Grande") %>% pull(theta_i)
+```
+
+Una vez seleccionados los municipios, generamos la simulación de la predictiva posterior y comparamos con respecto a los valores observados en dichos municios
+
+```{r,  fig.height=4}
+pred_post <- sim_rep(x)
+# gráfico
+pred_post %>% ggplot() + geom_histogram(aes(x = x_rep, binwidth=0.05),
+                                            fill ='grey', alpha = .6) +
+                  geom_vline(xintercept=theta_mun_peq,  color ='red', linetype="dashed") +
+                  geom_vline(xintercept=theta_mun_med,  color ='blue', linetype="dashed") +
+                  geom_vline(xintercept=theta_mun_gra,  color ='green', linetype="dashed") 
+```
+
+Como se puede observar en el anterior histograma, es claro que nuestra predictiva posterior resulta medianamente apropiada únicamente para la predicción de las tasas de mortalidad anuales únicamente del municipio grande  (donde la linea verde denota las tasas observadas para el mismo). Por el contrario, para el municipio pequeño (línea roja), y el mediano (línea azul), no asigna ninguna probabilidad. 
+
+## Incorporando Grupos de Edad
+
+Se sabe que las muertes por neumonia no son uniformes y las tasas de mortalidad
+son mas altas en niños y personas mayores. Ahora realizaremos el mismo análisis
+considerando grupos de edad. Para esto ampliaremos nuestro modelo
+
+$$ y_{k,i} \, | \, n_{k,i}, \theta_{k,i} \sim \textsf{Poisson}(\lambda_{k,i}),$$
+
+donde utilizamos el sub-indice $k,i$ para denotar el $k$-ésimo grupo de edad en
+el $i$-ésimo municipio.
+
+**Pregunta 16)** Genera histogramas para cada grupo de edad y discute si el
+supuesto anterior esta soportado por los datos. Para esto calcula las tasas de 
+mortalidad adecuadas. Auxiliate de `ggplot2::facet_wrap`.
+
+**Solución**
+
+Dado lo especificado, volvemos a generar los datos y esta vez se elige otra estrategia de agrupamiento.
+
+En particular, para calcular las meurtes por grupos de edad de cada año utilizamos la variable edad. Por otro lado, hacemos "longer" la tabla demográfica para poder unirla con la de defunciones por año. A continuación se presenta el código utilizado para realizar el procedimiento. 
+
+```{r, warning=FALSE}
+# función de carga de datos de todas las defunciones 
+carga_masiva_gedad <- function(){
+# se crea nueva tabla demográfica con grupo de edad
+  data_dem_gedad <- data_dem %>% select(-pob_total) %>% 
+                  rename(p_65_mas=pob65_mas) %>% 
+                  pivot_longer(cols = starts_with("p_"), names_to = "grupo_edad", values_to = "pob_total")
+
+  tibble(anio =seq(2015,2019)) %>% 
+    mutate(defunciones = map(anio, carga_defs)) %>% 
+    pull(defunciones) %>% 
+    reduce(rbind) %>% 
+    filter(edad<2000) %>% 
+    # creamos grupos de edad para las defunciones
+    mutate(grupo_edad = case_when(edad<=2~"p_0a2",
+                                  edad >= 3 & edad <= 5~"p_3a5",
+                                  edad >= 6 & edad <= 11~"p_6a11",
+                                  edad >= 12 & edad <= 17~"p_12a17",
+                                  edad >= 18 & edad <= 24~"p_18a24",
+                                  edad >= 25 & edad <= 25~"p_25a64",
+                                  TRUE ~"p_65_mas")) %>% 
+    group_by(entidad, municipio, grupo_edad) %>% 
+    dplyr::summarise(defunciones_gedad=n()) %>% 
+    # se agregan por municipio antes de hacer el join 
+    filter(entidad!= 99 || municipio!=999) %>% 
+  # join con poblacion total
+  dplyr::full_join(data_dem_gedad) %>% 
+    na.omit() 
+}
+# genera el conjunto de datos para todos los años de 2015 a 2019
+full_ds_gedad <- carga_masiva_gedad() %>% 
+                  select(-c(nom_ent, nom_mun)) %>% 
+                  mutate(mortalidad_edad = ceiling(100000*defunciones_gedad/pob_total),
+                         theta_i = ceiling(mortalidad_edad/5))
+# conteos agregados para los 5 años de defunciones y población total
+glimpse(full_ds_gedad) 
+```
+
+
+Una vez se estructuraron los datos para el análisis, procedemos a generar los histogramas.
+
+```{r,  fig.height=4}
+# gráfico
+full_ds_gedad %>% ggplot() + geom_histogram(aes(x = theta_i),fill ='cornflowerblue', alpha = .6) +
+                  facet_wrap(~grupo_edad) +
+                  xlab("Tasa anual de muertes por neumonía") + ylab("Frecuencia")
+```
+
+Los histogramas presentadospor grupo de edad confirman lo mencionado inicialmente. En particular, el grupo de edad con más muertos por neumonía es el de personas con más de 65 años. En particular, este grupo tiene una tasa media de 172 muertes por cada 100 mil habitantes. Por otro lado, dicho estadístico para las personas entre 0 y 2 años, es de 44 muertes. Adicionalmente, cabe denotar que la distribución para el grupo de más de 65 añós tiene colas más pesadas y sesgo hacia la derecha. _Nótese que los resultados presentados hacen referencia a la tasa de muertes anual_.
+
+---
+
+Por motivos de simplicidad usaremos la misma distribución previa para cada tasa
+de mortalidad asociada a grupos de edad y municipio que en los puntos anteriores. 
+
+**Pregunta 17)** Utiliza graficos de dispersión para determinar si hay efectos
+de regularización. Las ideas las encuentras arriba en la pregunta 12 y 14.
+
+**Solución**
+
+Inicialmente, seguimos el enfoque de los puntos anteriores y primero comparamos los logaritmos de las tasas de mortalidad anuales con respecto a la población total. 
+
+```{r}
+# gráfico
+full_ds_gedad %>% ggplot() + geom_point(aes(y = defunciones_gedad, x=pob_total),fill ='cornflowerblue', alpha = .6) +
+                  facet_wrap(~grupo_edad) +
+                  xlab("") + ylab("Frecuencia") + scale_y_log10() + scale_x_log10() 
+```
+En este caso, pareciera haber un patrón creciente, es decir, a mayor población, mayores tasas de mortalidad en cada grupo de población. Esta tendencia es mucho más notoria para el grupo de personas con más de 65 años, y para los de 0 a 2 años. 
+
+Generando los gráficos de dispersión para ver si hay regularización. 
+
+```{r, fig.height=4}
+ sim_params <- function(m, pars){ 
+   alpha <- pars[1]
+   beta  <- pars[2]
+  # simular thetas
+  sims <-  tibble(theta = rgamma(m, alpha, beta) )
+  # simular conteos
+  sims <- sims %>% mutate(fallecidos = rpois(m, lambda=theta)) 
+  sims
+ }
+
+# Definimos los parámetros para la simulación
+m <- 10000
+alpha_prior = final_guess_alpha
+beta_prior = round(params.prior[2], 2)
+sum_xi <- xtremevals_ds$tasa_mort   
+n <- nrow(xtremevals_ds)
+
+```
+
+```{r}
+# distribuciones simuladas y observadas
+gruposedad <- full_ds$grupo_edad %>% unique() %>% as.vector()
+for (grupo in gruposedad){
+  full_ds_gedadX <- full_ds %>% filter(grupo_edad==str(grupo))
+  sims_observada <- data.frame("theta"=full_ds_gedadX$theta_i, "fallecidos"=full_ds_gedadX$defunciones_gedad, Distribucion="Verosimilitud")
+  # sims_inicial <- sim_params(m, c(final_guess_alpha, final_guess_beta))  %>% mutate(Distribucion="Inicial")
+  sims_posterior <- sim_params(m, c(sum_xi + final_guess_alpha, final_guess_beta + n)) %>% mutate(Distribucion="Posterior")
+
+  sims <- bind_rows(sims_observada, sims_posterior)
+
+  ggplot(sims, aes(x = theta, y = fallecidos, colour = Distribucion)) + geom_point()
+}
+```
+
+
+El resultado esperado para este ejercicio es que si hubiese regularizacion que ajustara las distribuciones para los distintos grupos de población. En particular, donde se dan ajustes importantes para las distribuciones de las tasas de los grupos de personas con 0 a 2 años y con 65 años o mas.
+
+**Pregunta 18)** Para uno de los tres municipios que escogiste anteriormente
+utiliza la distribución predictiva posterior para verificar el ajuste del modelo
+para los grupos de edad: $[0,3), [18,25) \text{ y } [64, \infty).$ ~~Puedes hacer
+un *lineup*.~~
+
+## Conclusiones: 
+
+¡El último modelo (edad-municipio) incorpora alrededor de 17K parámetros
+distintos! Sin duda, no es parsimonioso. De hecho, este modelo representa el
+extremo en complejidad para esta situación. Podemos incorporar una estructura
+jerárquica donde podemos interpretar una estructura multi-nivel en cuanto
+al conocimiento que podemos generar. Esto es por que en la estuctura de
+dependencia dejamos la misma distribucion previa sin importar municipio o grupo
+de edad. En cursos posteriores exploraremos estas opciones. Pero ahora, ¡a
+descansar!
+
+
+------------
+
+**Anexos**
+
+```{r, fig.height=8, warning=FALSE}
+
+alpha_prior = round(params.prior[1], 2)
+beta_prior = round(params.prior[2], 2)
+
+sum_x <- xtremevals_ds$total_defs %>% sum()
+sum_t <- 5*nrow(xtremevals_ds)
+
+params %>% mutate(previa =map2(alpha_prior, beta_prior,~rgamma(5000, .x, .y)),
+                  posterior =map2(alpha_prior, beta_prior,~rgamma(5000, .x+sum_x, .y+sum_t))) %>%
+           unnest(previa, posterior) %>% 
+  ggplot() + geom_histogram(aes(x = previa), fill ='salmon', alpha = .6) + 
+  geom_histogram(aes(x = posterior), bins = 30,fill ='#00BFC4', alpha = .6) + 
+  geom_vline(xintercept = sum_x/sum_t, linestyle ='dashed', color ='red') +
+  facet_wrap(alpha~beta, scales = "free_x")
+
+```
